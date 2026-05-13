@@ -12,6 +12,7 @@ futures-util = "0.3"
 gtk = { package = "gtk4", version = "0.9", features = ["v4_18"] }
 adw = { package = "libadwaita", version = "0.7", features = ["v1_6"] }
 indicatif = "0.17"
+pulldown-cmark = "0.11"
 reqwest = { version = "0.12", features = ["json", "stream"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

@@ -3,6 +3,8 @@ use adw::{Application, ApplicationWindow, Clamp, HeaderBar, ToolbarView};
 use anyhow::Result;
 use gtk::{Box, Button, Entry, Label, Orientation, ScrolledWindow, Separator};
 
+use crate::markdown;
+
 const APP_ID: &str = "com.canonical.UbuntuDesktopHelp";
 
 pub fn run() -> Result<()> {
@@ -135,14 +137,21 @@ fn on_send(input: &Entry, message_list: &Box, scroll: &ScrolledWindow) {
 
 fn append_bubble(message_list: &Box, text: &str, is_user: bool) {
     let label = Label::builder()
-        .label(text)
         .wrap(true)
         .wrap_mode(gtk::pango::WrapMode::WordChar)
         .xalign(if is_user { 1.0 } else { 0.0 })
         .halign(if is_user { gtk::Align::End } else { gtk::Align::Start })
         .selectable(true)
         .build();
-    label.add_css_class(if is_user { "user-bubble" } else { "assistant-bubble" });
+
+    if is_user {
+        label.set_text(text); // user input is plain text, never parsed as markup
+        label.add_css_class("user-bubble");
+    } else {
+        label.set_markup(&markdown::to_pango(text));
+        label.add_css_class("assistant-bubble");
+    }
+
     message_list.append(&label);
 }
 

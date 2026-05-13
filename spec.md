@@ -268,3 +268,32 @@ let mmap = unsafe { MmapOptions::new().map(&file)? };
 
 This becomes worthwhile when the index exceeds ~150 MB (roughly 5 repositories of current size) or when the binary size limit of the Snap Store becomes a concern.
 
+---
+
+## Stretch Goal: Rich Code Block Rendering in GUI
+
+### Context
+
+The current GUI renders assistant Markdown responses by converting them to Pango markup (`pulldown-cmark` → `gtk::Label::set_markup()`). This handles bold, italic, inline code, headings, lists, and links well. However, fenced code blocks are rendered as plain monospace text inside `<tt>` tags — no syntax highlighting, no visual separation from prose, and no copy button.
+
+### Proposed approach
+
+Replace the single `gtk::Label` per assistant response with a composite `gtk::Box` containing alternating widgets:
+
+- **Prose segments** — `gtk::Label` with Pango markup, as today
+- **Code block segments** — a dedicated widget built from:
+  - `gtk::Frame` or a CSS-styled `gtk::Box` with a distinct background
+  - `sourceview5::View` (GtkSourceView) with syntax highlighting language auto-detected from the fenced code block info string (e.g. `rust`, `bash`, `yaml`)
+  - A "Copy" button in the top-right corner (`gtk::Button` overlaid via `gtk::Overlay`)
+
+The `pulldown-cmark` event stream already distinguishes `Tag::CodeBlock(CodeBlockKind::Fenced(lang))` from inline code, so the split point is clean.
+
+### Dependencies
+
+- `sourceview5` crate + `libgtksourceview-5-dev` / `libgtksourceview-5-0` system packages
+- Additional snap stage-package: `libgtksourceview-5-0`
+
+### When to implement
+
+When the LLM backend is wired up and real responses are flowing through the GUI, making code block quality visible and worth the added complexity.
+
