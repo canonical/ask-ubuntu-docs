@@ -183,7 +183,8 @@ fn on_send(
         .get(system_dropdown.selected() as usize)
         .copied()
         .unwrap_or("Desktop");
-    let system_prompt = prompts::get(product).to_string();
+    let system_prompt = prompts::get_prompt(product).to_string();
+    let doc_prefix = prompts::source_prefix(product).map(str::to_string);
     input.set_text("");
     input.set_sensitive(false);
     send_btn.set_sensitive(false);
@@ -245,7 +246,9 @@ fn on_send(
     tokio_handle.spawn(async move {
         // RAG search is CPU-bound; block_in_place prevents starving other tokio tasks
         let relevant = tokio::task::block_in_place(|| {
-            rag.lock().unwrap().search(&query, TOP_K).unwrap_or_default()
+            rag.lock().unwrap()
+                .search(&query, TOP_K, doc_prefix.as_deref())
+                .unwrap_or_default()
         });
 
         let user_content = if relevant.is_empty() {

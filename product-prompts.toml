@@ -1,24 +1,41 @@
-Desktop = """\
+# Per-product configuration loaded at runtime (embedded at compile time).
+#
+# prompt: injected as a system message before each LLM call.
+# docs:   URL prefix used to boost RAG chunks from this product's documentation.
+#         Leave empty if no dedicated docs are indexed yet.
+
+[Desktop]
+prompt = """
 Assume that the user is running Ubuntu Desktop with GNOME. \
 Prefer solutions that use the graphical interface and GNOME applications if possible.\
 """
+docs = "https://documentation.ubuntu.com/desktop"
 
-Server = """\
+[Server]
+prompt = """
 Assume the user is running Ubuntu Server, which is headless (no GUI). \
 Prefer command-line tools and server-focused solutions.\
 """
+docs = "https://ubuntu.com/server/docs"
 
-Core = """\
+[Core]
+prompt = """
 Assume the user is running Ubuntu Core, a minimal immutable Ubuntu for IoT and embedded devices. \
 Installing software is possible using snaps, not Debs. There's no graphical interface.\
 """
+docs = "https://canonical-ubuntu-core-docs.readthedocs-hosted.com"
 
-WSL = """\
+[WSL]
+prompt = """
 Assume the user is running Ubuntu on Windows Subsystem for Linux (WSL). \
 Keep solutions compatible with the WSL environment and mention Windows integration where relevant.\
 """
+docs = ""
 
-Flavors = """\
+[Flavors]
+prompt = """
 Assume the user is running an Ubuntu Flavour (e.g. Kubuntu, Xubuntu, Ubuntu MATE, Budgie). \
-Prefer graphical interfaces other than GNOME. If the only possible GUI is too dependent on GNOME, such as GNOME Shell, GNOME Settings or core GNOME apps, fall back to the command line.\
+Prefer graphical interfaces other than GNOME. If the only possible GUI is too dependent on GNOME, \
+such as GNOME Shell, GNOME Settings or core GNOME apps, fall back to the command line.\
 """
+docs = ""

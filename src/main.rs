@@ -128,7 +128,7 @@ async fn run_chat(ollama_url: String, model: String, use_copilot: bool) -> Resul
         }
 
         // Retrieve the most relevant doc chunks for this query via cosine similarity
-        let relevant = tokio::task::block_in_place(|| rag.search(&input, TOP_K))?;
+        let relevant = tokio::task::block_in_place(|| rag.search(&input, TOP_K, None))?;
 
         // Prepend retrieved chunks as context so the LLM answers from documentation
         let user_content = if relevant.is_empty() {

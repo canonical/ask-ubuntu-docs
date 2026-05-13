@@ -7,6 +7,9 @@ static INDEX_BYTES: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/index.bin"
 
 // Number of documentation chunks to retrieve per user query
 pub const TOP_K: usize = 5;
+// Cosine similarity multiplier applied to chunks from the selected product's docs.
+// Boosts on-topic results without completely excluding other sources.
+const PRODUCT_BOOST: f32 = 1.5;
 
 struct IndexEntry {
     source: String,
@@ -33,9 +36,11 @@ impl RagStore {
         Ok(Self { entries, embedder })
     }
 
-    // Embeds `query` and returns the top-k most similar (source, text) pairs by cosine similarity.
-    // Also blocking; wrap in block_in_place when called from async code.
-    pub fn search(&mut self, query: &str, top_k: usize) -> Result<Vec<(String, String)>> {
+    /// Embeds `query` and returns the top-k most similar (source, text) pairs.
+    /// If `product_prefix` is `Some(prefix)`, chunks whose source URL contains
+    /// that prefix have their cosine similarity multiplied by `PRODUCT_BOOST`
+    /// before ranking, so on-topic results surface first without hard-filtering.
+    pub fn search(&mut self, query: &str, top_k: usize, product_prefix: Option<&str>) -> Result<Vec<(String, String)>> {
         let query_vec = self
             .embedder
             .embed(vec![query.to_string()], None)
@@ -44,12 +49,20 @@ impl RagStore {
             .next()
             .context("embedder returned no vector for query")?;
 
-        // Score every entry; collect indices so we can look up text after sorting
+        // Score every entry; apply product boost where applicable
         let mut scored: Vec<(f32, usize)> = self
             .entries
             .iter()
             .enumerate()
-            .map(|(i, e)| (cosine_similarity(&query_vec, &e.vector), i))
+            .map(|(i, e)| {
+                let mut score = cosine_similarity(&query_vec, &e.vector);
+                if let Some(prefix) = product_prefix {
+                    if e.source.contains(prefix) {
+                        score *= PRODUCT_BOOST;
+                    }
+                }
+                (score, i)
+            })
             .collect();
 
         // Sort descending: highest similarity first
