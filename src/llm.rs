@@ -246,7 +246,13 @@ impl CopilotClient {
 }
 
 fn parse_copilot_chunk(line: &str) -> Result<StreamToken> {
-    let json = line.strip_prefix("data: ").context("unexpected SSE line format")?;
+    // SSE lines that don't carry data (comments, id:, event:) are valid and must be skipped.
+    let Some(json) = line.strip_prefix("data: ") else {
+        return Ok(StreamToken { content: String::new(), done: false });
+    };
+    if json.is_empty() {
+        return Ok(StreamToken { content: String::new(), done: false });
+    }
     if json == "[DONE]" {
         return Ok(StreamToken { content: String::new(), done: true });
     }
