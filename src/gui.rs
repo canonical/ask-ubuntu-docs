@@ -288,7 +288,7 @@ fn append_bubble(message_list: &Box, text: &str, is_user: bool) {
         .build();
 
     if is_user {
-        label.set_text(text); // user input is plain text, never parsed as markup
+        label.set_markup(&markdown::linkify_plain(text)); // auto-link URLs; plain text otherwise
         label.add_css_class("user-bubble");
     } else {
         wire_links(&label);
