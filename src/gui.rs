@@ -186,8 +186,8 @@ fn on_send(
         .wrap_mode(gtk::pango::WrapMode::WordChar)
         .xalign(0.0)
         .halign(gtk::Align::Start)
-        .selectable(true)
         .build();
+    wire_links(&reply_label);
     reply_label.add_css_class("assistant-bubble");
     message_list.append(&reply_label);
     scroll_to_bottom(scroll);
@@ -283,18 +283,32 @@ fn append_bubble(message_list: &Box, text: &str, is_user: bool) {
         .wrap_mode(gtk::pango::WrapMode::WordChar)
         .xalign(if is_user { 1.0 } else { 0.0 })
         .halign(if is_user { gtk::Align::End } else { gtk::Align::Start })
-        .selectable(true)
+        .selectable(is_user) // user bubbles are selectable; assistant bubbles use link activation
         .build();
 
     if is_user {
         label.set_text(text); // user input is plain text, never parsed as markup
         label.add_css_class("user-bubble");
     } else {
+        wire_links(&label);
         label.set_markup(&markdown::to_pango(text));
         label.add_css_class("assistant-bubble");
     }
 
     message_list.append(&label);
+}
+
+// Opens links in the system browser when clicked. Attached to assistant labels so that
+// link activation takes priority over text selection (the two conflict in gtk::Label).
+fn wire_links(label: &Label) {
+    label.connect_activate_link(|_, uri| {
+        gtk::UriLauncher::new(uri).launch(
+            None::<&gtk::Window>,
+            gtk::gio::Cancellable::NONE,
+            |_| {},
+        );
+        glib::Propagation::Stop
+    });
 }
 
 fn scroll_to_bottom(scroll: &ScrolledWindow) {
