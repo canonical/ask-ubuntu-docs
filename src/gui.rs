@@ -131,7 +131,23 @@ fn on_send(input: &Entry, message_list: &Box, scroll: &ScrolledWindow) {
     input.set_text("");
 
     append_bubble(message_list, &text, true);
-    append_bubble(message_list, "Hello", false);
+    append_bubble(
+        message_list,
+        "Hello.\n\n\
+         ## This is a list\n\n\
+         - An item.\n\
+         - With some **Bold Text**.\n\n\
+         ## A numbered list\n\n\
+         - Here's an *italic phrase*.\n\
+         - Or even `code elements`.\n\n\
+         ## Code block\n\n\
+         Run a command:\n\n\
+         ```\n\
+         snap install me\n\n\
+         Installed.\n\
+         ```",
+        false,
+    );
     scroll_to_bottom(scroll);
 }
 
