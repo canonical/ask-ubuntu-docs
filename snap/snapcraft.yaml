@@ -1,9 +1,9 @@
 name: ubuntu-desktop-help
 base: core24
 version: '0.1.0'
-summary: AI-powered Ubuntu Desktop help CLI
+summary: AI-powered Ubuntu Desktop help app
 description: |
-  An interactive CLI tool that answers questions about Ubuntu Desktop
+  An interactive CLI tool that answers questions about Ubuntu
   using local documentation and a large language model. Supports both
   a local Ollama backend and the GitHub Copilot / GitHub Models API.
 

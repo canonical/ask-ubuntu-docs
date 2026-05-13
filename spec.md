@@ -14,7 +14,7 @@ The minimum viable product is a CLI. A stretch goal is an integration with GNOME
 
 ### In scope
 
-- Cloning and keeping Ubuntu Desktop docs up-to-date locally
+- Cloning and keeping Ubuntu docs up-to-date locally
 - Chunking and embedding markdown documentation files into a local vector database
 - Answering user questions via a CLI interface
 - Returning a generated answer, a link to the relevant local doc page, and optionally a clarifying question
@@ -77,7 +77,7 @@ Any architectural change (e.g. switching vector backends, adding more documentat
 
 ### 1. Doc Syncer
 
-- Clones the Ubuntu Desktop documentation Git repository locally
+- Clones several Ubuntu documentation Git repositories locally
 - Detects Ubuntu version on the host machine
 - On startup (or on demand), pulls latest changes
 - Stores docs under a local path using environment variables.
@@ -296,4 +296,3 @@ The `pulldown-cmark` event stream already distinguishes `Tag::CodeBlock(CodeBloc
 ### When to implement
 
 When the LLM backend is wired up and real responses are flowing through the GUI, making code block quality visible and worth the added complexity.
-

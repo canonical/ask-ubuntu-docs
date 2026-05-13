@@ -211,7 +211,7 @@ Keep prompt construction in one place (`crates/query/src/prompt.rs`).
 
 ```
 System:
-You are a helpful assistant for Ubuntu Desktop users.
+You are a helpful assistant for Ubuntu users.
 Answer the user's question using only the documentation excerpts provided below.
 If the answer is not in the excerpts, say so clearly.
 If the question is ambiguous, ask one clarifying question.

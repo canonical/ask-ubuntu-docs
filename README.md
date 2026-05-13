@@ -2,7 +2,7 @@
 
 [![Watch the demo](https://img.youtube.com/vi/zOLcazhCQBk/0.jpg)](https://www.youtube.com/watch?v=zOLcazhCQBk)
 
-An experimental Rust application for answering Ubuntu Desktop questions with a local documentation context.
+An experimental Rust application for answering Ubuntu questions with a local documentation context.
 
 The current prototype is a CLI chat interface. It can talk to either:
 
