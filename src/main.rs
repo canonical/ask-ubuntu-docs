@@ -9,6 +9,7 @@ use indicatif::{ProgressBar, ProgressStyle};
 // Import the LLM module defined in llm.rs
 mod llm;
 mod markdown;
+mod prompts;
 use llm::{CopilotClient, LlmClient, Message, OllamaClient};
 
 // Import the in-memory RAG module defined in vectordb.rs

@@ -8,9 +8,11 @@ use gtk::{Box, Button, Entry, Label, Orientation, ScrolledWindow, Separator};
 
 use crate::llm::{LlmClient, Message};
 use crate::markdown;
+use crate::prompts;
 use crate::vectordb::{RagStore, TOP_K};
 
 const APP_ID: &str = "com.canonical.UbuntuDesktopHelp";
+const PRODUCTS: &[&str] = &["Desktop", "Server", "Core", "WSL", "Flavors"];
 
 pub fn run(
     client: Arc<LlmClient>,
@@ -147,14 +149,15 @@ fn build_ui(
 
     // Connect send button
     {
-        let (ml, sc, inp, btn, cl, ra, cv, th) = (
+        let (ml, sc, inp, btn, cl, ra, cv, th, sd) = (
             message_list.clone(), scroll.clone(), input.clone(), send_btn.clone(),
             client.clone(), rag.clone(), conversation.clone(), tokio_handle.clone(),
+            system_dropdown.clone(),
         );
-        send_btn.connect_clicked(move |_| on_send(&inp, &btn, &ml, &sc, &cl, &ra, &cv, &th));
+        send_btn.connect_clicked(move |_| on_send(&inp, &btn, &ml, &sc, &cl, &ra, &cv, &th, &sd));
     }
     // Connect Enter key in the input field
-    input.connect_activate(move |inp| on_send(inp, &send_btn, &message_list, &scroll, &client, &rag, &conversation, &tokio_handle));
+    input.connect_activate(move |inp| on_send(inp, &send_btn, &message_list, &scroll, &client, &rag, &conversation, &tokio_handle, &system_dropdown));
 
     window.present();
 }
@@ -168,11 +171,19 @@ fn on_send(
     rag: &Arc<Mutex<RagStore>>,
     conversation: &Arc<Mutex<Vec<Message>>>,
     tokio_handle: &tokio::runtime::Handle,
+    system_dropdown: &gtk::DropDown,
 ) {
     let text = input.text();
     if text.trim().is_empty() {
         return;
     }
+
+    // Read the selected product and its system prompt on the GTK thread before spawning.
+    let product = PRODUCTS
+        .get(system_dropdown.selected() as usize)
+        .copied()
+        .unwrap_or("Desktop");
+    let system_prompt = prompts::get(product).to_string();
     input.set_text("");
     input.set_sensitive(false);
     send_btn.set_sensitive(false);
@@ -248,11 +259,17 @@ fn on_send(
             format!("Context from documentation:\n{ctx}\n\nQuestion: {query}")
         };
 
-        // Add user message and snapshot the full history for the LLM call
+        // Build message list: optional system prompt prepended, then conversation history.
+        // The system message is NOT stored in `conversation` to avoid it repeating each turn.
         let messages = {
             let mut conv = conversation.lock().unwrap();
             conv.push(Message { role: "user".to_string(), content: user_content });
-            conv.clone()
+            let mut msgs = Vec::with_capacity(conv.len() + 1);
+            if !system_prompt.is_empty() {
+                msgs.push(Message { role: "system".to_string(), content: system_prompt });
+            }
+            msgs.extend_from_slice(&conv);
+            msgs
         };
 
         let sender_tok = sender.clone();

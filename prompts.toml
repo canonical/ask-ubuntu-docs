@@ -1,0 +1,24 @@
+Desktop = """\
+Assume that the user is running Ubuntu Desktop with GNOME. \
+Prefer solutions that use the graphical interface and GNOME applications if possible.\
+"""
+
+Server = """\
+Assume the user is running Ubuntu Server (headless, no GUI). \
+Prefer command-line tools, systemd units, and server-focused solutions.\
+"""
+
+Core = """\
+Assume the user is running Ubuntu Core, a minimal immutable Ubuntu for IoT and embedded devices. \
+Note that applications are delivered exclusively as snaps.\
+"""
+
+WSL = """\
+Assume the user is running Ubuntu on Windows Subsystem for Linux (WSL). \
+Keep solutions compatible with the WSL environment and mention Windows integration where relevant.\
+"""
+
+Flavors = """\
+Assume the user is running an Ubuntu Flavour (e.g. Kubuntu, Xubuntu, Ubuntu MATE, Budgie). \
+Adapt graphical instructions to their desktop environment when possible.\
+"""
