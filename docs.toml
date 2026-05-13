@@ -1,0 +1,15 @@
+# Documentation repositories cloned into docs/ at build time.
+# Each entry has a `url` (Git clone URL) and a `name` (subdirectory under docs/).
+# Re-run `cargo build --release` after editing this file to rebuild the RAG index.
+
+[[repo]]
+url  = "https://github.com/ubuntu/ubuntu-desktop-documentation"
+name = "ubuntu-desktop-documentation"
+
+[[repo]]
+url  = "https://github.com/canonical/ubuntu-server-documentation"
+name = "ubuntu-server-documentation"
+
+[[repo]]
+url  = "https://github.com/canonical/ubuntu-core-docs"
+name = "ubuntu-core-docs"

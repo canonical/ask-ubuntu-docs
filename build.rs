@@ -7,6 +7,7 @@ use std::process::Command;
 
 use fastembed::{EmbeddingModel, InitOptions, TextEmbedding};
 use pulldown_cmark::{Event, Options, Parser, Tag, TagEnd};
+use serde::Deserialize;
 use text_splitter::TextSplitter;
 
 // Maximum characters per chunk; keeps each chunk within a useful slice of LLM context
@@ -14,19 +15,32 @@ const CHUNK_SIZE: usize = 512;
 // Output dimension of BGE-small-en-v1.5; written into the index header so the runtime can verify
 const EMBEDDING_DIM: usize = 384;
 
-// Documentation repositories cloned into docs/ at build time.
-// Each tuple is (clone URL, subdirectory name under docs/).
-const DOCS_REPOS: &[(&str, &str)] = &[
-    ("https://github.com/ubuntu/ubuntu-desktop-documentation", "ubuntu-desktop-documentation"),
-    ("https://github.com/canonical/ubuntu-server-documentation", "ubuntu-server-documentation"),
-    ("https://github.com/canonical/ubuntu-core-docs", "ubuntu-core-docs"),
-];
+#[derive(Deserialize)]
+struct DocsConfig {
+    repo: Vec<RepoEntry>,
+}
+
+#[derive(Deserialize)]
+struct RepoEntry {
+    url: String,
+    name: String,
+}
+
+/// Load the list of documentation repositories from `docs.toml` at build time.
+fn load_docs_config() -> anyhow::Result<Vec<(String, String)>> {
+    let src = fs::read_to_string("docs.toml")
+        .map_err(|e| anyhow::anyhow!("failed to read docs.toml: {e}"))?;
+    let config: DocsConfig = toml::from_str(&src)
+        .map_err(|e| anyhow::anyhow!("docs.toml is malformed: {e}"))?;
+    Ok(config.repo.into_iter().map(|r| (r.url, r.name)).collect())
+}
 
 fn main() -> anyhow::Result<()> {
-    // Only re-run this build script when build.rs itself changes.
+    // Re-run this build script when build.rs or docs.toml changes.
     // We intentionally do NOT watch docs/ here: since we clone into docs/ ourselves,
     // watching it would cause an infinite rebuild loop.
     println!("cargo:rerun-if-changed=build.rs");
+    println!("cargo:rerun-if-changed=docs.toml");
 
     let out_dir = env::var("OUT_DIR")?;
     let index_path = Path::new(&out_dir).join("index.bin");
@@ -41,7 +55,8 @@ fn main() -> anyhow::Result<()> {
         return Ok(());
     }
 
-    clone_or_update_repos("docs")?;
+    let repos = load_docs_config()?;
+    clone_or_update_repos("docs", &repos)?;
 
     let chunks = load_chunks("docs");
 
@@ -74,11 +89,11 @@ fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-// Ensures every repo in DOCS_REPOS is present under `docs_dir`.
+// Ensures every repo in `repos` is present under `docs_dir`.
 // Clones with --depth 1 on first run; does `git pull --ff-only` on subsequent runs.
-fn clone_or_update_repos(docs_dir: &str) -> anyhow::Result<()> {
+fn clone_or_update_repos(docs_dir: &str, repos: &[(String, String)]) -> anyhow::Result<()> {
     fs::create_dir_all(docs_dir)?;
-    for (url, name) in DOCS_REPOS {
+    for (url, name) in repos {
         let dest = Path::new(docs_dir).join(name);
         if dest.join(".git").is_dir() {
             println!("cargo:warning=Updating {name}…");
