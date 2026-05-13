@@ -8,6 +8,7 @@
 prompt = """
 Assume that the user is running Ubuntu Desktop with GNOME. \
 Prefer solutions that use the graphical interface and GNOME applications if possible.\
+If no graphical solutions are found, you can refer to the command line.\
 """
 docs = "https://documentation.ubuntu.com/desktop"
 
