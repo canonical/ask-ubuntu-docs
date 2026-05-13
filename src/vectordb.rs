@@ -6,7 +6,7 @@ use fastembed::{EmbeddingModel, InitOptions, TextEmbedding};
 static INDEX_BYTES: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/index.bin"));
 
 // Number of documentation chunks to retrieve per user query
-pub const TOP_K: usize = 5;
+pub const TOP_K: usize = 8;
 // Cosine similarity multiplier applied to chunks from the selected product's docs.
 // Boosts on-topic results without completely excluding other sources.
 const PRODUCT_BOOST: f32 = 1.5;

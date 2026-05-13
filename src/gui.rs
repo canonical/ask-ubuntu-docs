@@ -251,7 +251,10 @@ fn on_send(
                 .unwrap_or_default()
         });
 
-        let user_content = if relevant.is_empty() {
+        // RAG context is injected into the LLM call for this turn only.
+        // The bare query (without doc chunks) is what gets stored in history,
+        // so doc chunks don't accumulate and re-inflate the prompt on every turn.
+        let llm_user_content = if relevant.is_empty() {
             query.clone()
         } else {
             let ctx = relevant
@@ -262,16 +265,17 @@ fn on_send(
             format!("Context from documentation:\n{ctx}\n\nQuestion: {query}")
         };
 
-        // Build message list: optional system prompt prepended, then conversation history.
+        // Build message list: optional system prompt prepended, then conversation history,
+        // then the current turn's augmented user message.
         // The system message is NOT stored in `conversation` to avoid it repeating each turn.
         let messages = {
-            let mut conv = conversation.lock().unwrap();
-            conv.push(Message { role: "user".to_string(), content: user_content });
-            let mut msgs = Vec::with_capacity(conv.len() + 1);
+            let conv = conversation.lock().unwrap();
+            let mut msgs = Vec::with_capacity(conv.len() + 2);
             if !system_prompt.is_empty() {
                 msgs.push(Message { role: "system".to_string(), content: system_prompt });
             }
             msgs.extend_from_slice(&conv);
+            msgs.push(Message { role: "user".to_string(), content: llm_user_content });
             msgs
         };
 
@@ -284,10 +288,9 @@ fn on_send(
 
         match result {
             Ok(reply) => {
-                conversation.lock().unwrap().push(Message {
-                    role: "assistant".to_string(),
-                    content: reply,
-                });
+                let mut conv = conversation.lock().unwrap();
+                conv.push(Message { role: "user".to_string(), content: query });
+                conv.push(Message { role: "assistant".to_string(), content: reply });
             }
             Err(e) => {
                 sender.send_blocking(Some(format!("\n\n*Error: {e}*"))).ok();
