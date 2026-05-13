@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::env;
 use std::fs::{self, File};
 use std::io::Write;
@@ -101,6 +102,93 @@ fn clone_or_update_repos(docs_dir: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
+// Reads ogp_site_url from each repo's docs/conf.py.
+// Returns a map from repo directory name (e.g. "ubuntu-desktop-documentation") to base URL.
+fn read_base_urls(docs_dir: &str) -> HashMap<String, String> {
+    let mut map = HashMap::new();
+    let root = Path::new(docs_dir);
+    let entries = match fs::read_dir(root) {
+        Ok(e) => e,
+        Err(_) => return map,
+    };
+    for entry in entries.filter_map(|e| e.ok()) {
+        let repo_path = entry.path();
+        if !repo_path.is_dir() { continue; }
+        let repo_name = match repo_path.file_name().and_then(|n| n.to_str()) {
+            Some(n) => n.to_string(),
+            None => continue,
+        };
+        // conf.py is conventionally at <repo>/docs/conf.py
+        let conf_path = repo_path.join("docs").join("conf.py");
+        let conf = match fs::read_to_string(&conf_path) {
+            Ok(c) => c,
+            Err(_) => continue,
+        };
+        if let Some(url) = extract_ogp_site_url(&conf) {
+            map.insert(repo_name, url);
+        }
+    }
+    map
+}
+
+// Extracts the string value of `ogp_site_url = "..."` from a conf.py file.
+fn extract_ogp_site_url(conf: &str) -> Option<String> {
+    for line in conf.lines() {
+        let trimmed = line.trim();
+        if let Some(rest) = trimmed.strip_prefix("ogp_site_url") {
+            let rest = rest.trim().strip_prefix('=')?.trim();
+            // Strip surrounding quotes (single or double)
+            let url = rest
+                .strip_prefix('"').and_then(|s| s.strip_suffix('"'))
+                .or_else(|| rest.strip_prefix('\'').and_then(|s| s.strip_suffix('\'')))
+                .unwrap_or(rest);
+            if !url.is_empty() {
+                return Some(url.to_string());
+            }
+        }
+    }
+    None
+}
+
+// Converts a local file path to a published documentation URL using the rules:
+//   1. Strip leading docs/ (local root directory)
+//   2. Extract repo name and look up its base URL
+//   3. If the next path component is `docs`, strip it too
+//   4. Strip the trailing .md extension
+//   5. Append a trailing slash
+//
+// Returns None if the path doesn't match any known repo base URL.
+fn file_path_to_url(path: &Path, base_urls: &HashMap<String, String>) -> Option<String> {
+    let mut components = path.components().peekable();
+
+    // 1. Drop leading `docs` component
+    let first = components.next()?.as_os_str().to_str()?;
+    if first != "docs" { return None; }
+
+    // 2. Repo name → base URL
+    let repo_name = components.next()?.as_os_str().to_str()?;
+    let base_url = base_urls.get(repo_name)?.trim_end_matches('/');
+
+    // 3. If next component is `docs`, drop it
+    if components.peek().and_then(|c| c.as_os_str().to_str()) == Some("docs") {
+        components.next();
+    }
+
+    // 4. Collect remaining components; strip .md from the last one
+    let mut parts: Vec<String> = components
+        .map(|c| c.as_os_str().to_str().unwrap_or("").to_string())
+        .collect();
+    if let Some(last) = parts.last_mut() {
+        if let Some(stem) = last.strip_suffix(".md") {
+            *last = stem.to_string();
+        }
+    }
+
+    // 5. Join and add trailing slash
+    let path_str = parts.join("/");
+    Some(format!("{base_url}/{path_str}/"))
+}
+
 struct Chunk {
     source: String,
     text: String,
@@ -108,6 +196,8 @@ struct Chunk {
 
 // Walks `dir` recursively for .md files, strips markdown to plain text, and splits into chunks.
 fn load_chunks(dir: &str) -> Vec<Chunk> {
+    let base_urls = read_base_urls(dir);
+
     let mut md_files = Vec::new();
     collect_md_files(Path::new(dir), &mut md_files);
     // Sort for a deterministic index regardless of filesystem ordering
@@ -125,7 +215,8 @@ fn load_chunks(dir: &str) -> Vec<Chunk> {
         // reused content is present in the plain-text output
         let expanded = expand_includes(&raw, file_path);
         let plain = markdown_to_plain_text(&expanded);
-        let source = file_path.display().to_string();
+        let source = file_path_to_url(file_path, &base_urls)
+            .unwrap_or_else(|| file_path.display().to_string());
         for chunk_text in splitter.chunks(&plain) {
             let text = chunk_text.trim().to_string();
             if !text.is_empty() {
