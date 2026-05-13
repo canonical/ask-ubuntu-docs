@@ -370,14 +370,46 @@ fn parse_include_directive(line: &str) -> Option<String> {
     Some(rest.to_string())
 }
 
+// Strips YAML frontmatter (--- ... ---) and MyST anchor labels ((label)=) from a
+// Markdown document before parsing, so they don't pollute the plain-text chunks.
+fn strip_myst_noise(markdown: &str) -> &str {
+    let mut s = markdown;
+
+    // Strip YAML frontmatter: document starts with `---\n…\n---`
+    if let Some(rest) = s.strip_prefix("---\n") {
+        if let Some(end) = rest.find("\n---\n") {
+            s = &rest[end + 5..]; // skip past the closing `---\n`
+        } else if let Some(end) = rest.find("\n---") {
+            // Allow `---` at the very end of file with no trailing newline
+            let after = &rest[end + 4..];
+            if after.trim().is_empty() {
+                s = after;
+            }
+        }
+    }
+
+    s
+}
+
 // Strips markdown syntax to plain text using pulldown-cmark's event stream.
 fn markdown_to_plain_text(markdown: &str) -> String {
+    let markdown = strip_myst_noise(markdown);
+
     let opts = Options::ENABLE_TABLES | Options::ENABLE_STRIKETHROUGH;
     let parser = Parser::new_ext(markdown, opts);
     let mut text = String::new();
     for event in parser {
         match event {
-            Event::Text(t) | Event::Code(t) => text.push_str(&t),
+            Event::Text(t) => {
+                // Drop MyST anchor labels: lines of the form `(some-label)=`
+                let t = t.trim();
+                if t.starts_with('(') && t.ends_with(")=") {
+                    continue;
+                }
+                text.push_str(t);
+                text.push(' ');
+            }
+            Event::Code(t) => text.push_str(&t),
             Event::SoftBreak | Event::HardBreak => text.push(' '),
             Event::End(TagEnd::Paragraph)
             | Event::End(TagEnd::Heading { .. })
