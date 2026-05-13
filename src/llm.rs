@@ -63,9 +63,9 @@ struct OpenAiChoice {
 
 #[derive(Deserialize, Default)]
 struct OpenAiDelta {
-    // May be absent on the first chunk (which only carries the role)
+    // Null on the final chunk (finish_reason="stop"); absent on the first chunk (role-only)
     #[serde(default)]
-    content: String,
+    content: Option<String>,
 }
 
 // ── Ollama client ─────────────────────────────────────────────────────────────
@@ -256,10 +256,11 @@ fn parse_copilot_chunk(line: &str) -> Result<StreamToken> {
     if json == "[DONE]" {
         return Ok(StreamToken { content: String::new(), done: true });
     }
-    let chunk: OpenAiChunk =
-        serde_json::from_str(json).context("failed to parse Copilot SSE chunk")?;
-    let content =
-        chunk.choices.into_iter().next().map(|c| c.delta.content).unwrap_or_default();
+    let chunk: OpenAiChunk = serde_json::from_str(json)
+        .context("failed to parse Copilot SSE chunk")?;
+    let content = chunk.choices.into_iter().next()
+        .and_then(|c| c.delta.content)
+        .unwrap_or_default();
     Ok(StreamToken { content, done: false })
 }
 
