@@ -16,6 +16,11 @@ apps:
     plugs:
       - network          # Ollama / Copilot API calls
       - home             # reading config/token files under $HOME
+      - desktop          # GTK4 display access
+      - desktop-legacy
+      - wayland
+      - x11
+      - opengl
 
 parts:
   ubuntu-desktop-help:
@@ -25,6 +30,14 @@ parts:
       - git              # required by build.rs to clone documentation repos
       - pkg-config
       - libssl-dev
+      - libgtk-4-dev
+      - libadwaita-1-dev
     stage-packages:
       - libssl3t64
       - ca-certificates
+      - libgtk-4-1
+      - libadwaita-1-0
+      - libglib2.0-0t64
+      - libcairo2
+      - libpango-1.0-0
+      - libgdk-pixbuf-2.0-0

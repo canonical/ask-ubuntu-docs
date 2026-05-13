@@ -13,6 +13,8 @@ use llm::{CopilotClient, LlmClient, Message, OllamaClient};
 mod vectordb;
 use vectordb::{RagStore, TOP_K};
 
+mod gui;
+
 // Default address where Ollama listens when installed locally
 const DEFAULT_OLLAMA_URL: &str = "http://localhost:11434";
 // Default model to use; small enough to run without a GPU
@@ -172,6 +174,5 @@ async fn run_chat(ollama_url: String, model: String, use_copilot: bool) -> Resul
 }
 
 fn run_gui() -> Result<()> {
-    println!("GUI not yet implemented.");
-    Ok(())
+    gui::run()
 }
