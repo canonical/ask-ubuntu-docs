@@ -225,8 +225,27 @@ struct Chunk {
 fn load_chunks(dir: &str) -> Vec<Chunk> {
     let base_urls = read_base_urls(dir);
 
+    // For each cloned repository under `dir`, index only the `docs/` subdirectory
+    // if one exists — this avoids indexing application code that lives alongside the
+    // documentation in the same repository. If there is no `docs/` subdirectory,
+    // fall back to indexing the entire repository root.
     let mut md_files = Vec::new();
-    collect_md_files(Path::new(dir), &mut md_files);
+    let top = Path::new(dir);
+    if let Ok(entries) = fs::read_dir(top) {
+        for entry in entries.filter_map(|e| e.ok()) {
+            let repo_path = entry.path();
+            if !repo_path.is_dir() {
+                continue;
+            }
+            let docs_subdir = repo_path.join("docs");
+            let walk_root = if docs_subdir.is_dir() {
+                docs_subdir
+            } else {
+                repo_path
+            };
+            collect_md_files(&walk_root, &mut md_files);
+        }
+    }
     // Sort for a deterministic index regardless of filesystem ordering
     md_files.sort();
 
