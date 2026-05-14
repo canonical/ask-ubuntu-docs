@@ -21,11 +21,19 @@ pub const DEFAULT_COPILOT_MODEL: &str = "gpt-4o-mini";
 // successive identical requests due to load balancing across server configurations).
 const COPILOT_API_URL: &str = "https://models.github.ai/inference/chat/completions";
 
+// The role of a message sender in a conversation
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum Role {
+    System,
+    User,
+    Assistant,
+}
+
 // A single message in a conversation, following the OpenAI/Ollama chat format
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct Message {
-    // Either "system", "user", or "assistant"
-    pub role: String,
+    pub role: Role,
     pub content: String,
 }
 

@@ -3,7 +3,7 @@ use std::time::Duration;
 use anyhow::Result;
 use indicatif::{ProgressBar, ProgressStyle};
 
-use crate::llm::{CopilotClient, DEFAULT_COPILOT_MODEL, LlmClient, Message, OllamaClient};
+use crate::llm::{CopilotClient, DEFAULT_COPILOT_MODEL, LlmClient, Message, OllamaClient, Role};
 use crate::vectordb::RagStore;
 
 // Default address where Ollama listens when installed locally
@@ -29,7 +29,7 @@ impl Conversation {
 
     /// The last assistant reply in the history, if one exists.
     pub fn last_assistant_reply(&self) -> Option<&str> {
-        self.history.iter().rev().find(|m| m.role == "assistant").map(|m| m.content.as_str())
+        self.history.iter().rev().find(|m| m.role == Role::Assistant).map(|m| m.content.as_str())
     }
 
     /// Build the RAG search query for the current user input.
@@ -63,17 +63,17 @@ impl Conversation {
     /// `[system, ...history, augmented_current_turn]`.
     pub fn build_llm_messages(&self, augmented_user_content: String) -> Vec<Message> {
         let mut msgs = Vec::with_capacity(self.history.len() + 2);
-        msgs.push(Message { role: "system".to_string(), content: self.system_prompt.clone() });
+        msgs.push(Message { role: Role::System, content: self.system_prompt.clone() });
         msgs.extend_from_slice(&self.history);
-        msgs.push(Message { role: "user".to_string(), content: augmented_user_content });
+        msgs.push(Message { role: Role::User, content: augmented_user_content });
         msgs
     }
 
     /// Record a completed turn. Call this only after a successful LLM reply.
     /// Stores the bare user input — never the augmented content with RAG chunks.
     pub fn add_turn(&mut self, user_input: String, assistant_reply: String) {
-        self.history.push(Message { role: "user".to_string(), content: user_input });
-        self.history.push(Message { role: "assistant".to_string(), content: assistant_reply });
+        self.history.push(Message { role: Role::User, content: user_input });
+        self.history.push(Message { role: Role::Assistant, content: assistant_reply });
     }
 }
 
