@@ -121,7 +121,7 @@ The query engine is the bridge between the user's question and the documentation
   Question: <user's query>
 ```
 
-Total RAG context per turn: approximately **1,200 tokens** (8 chunks × ~150 tokens each). This is under 1% of the context windows of Claude Haiku (200k) or GPT-4o mini (128k).
+Total RAG context per turn: approximately **1,800 tokens** (12 chunks × ~150 tokens each). This is under 1% of the context windows of Claude Haiku (200k) or GPT-4o mini (128k).
 
 The doc chunks are **not stored in conversation history** — they are injected fresh for each turn using the current query. This keeps the conversation history lean regardless of how many turns have elapsed.
 
