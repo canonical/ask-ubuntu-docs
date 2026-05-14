@@ -98,11 +98,14 @@ async fn run_chat(ollama_url: String, model: Option<String>, use_copilot: bool) 
     let mut rag = RagStore::load().await?;
     spinner.finish_and_clear();
 
-    // System prompt contains only role instructions; doc context is injected per-query via RAG
-    let mut messages = vec![Message {
+    // history holds bare user queries + assistant replies only — no RAG chunks, no system prompt.
+    // The system prompt and per-turn RAG context are injected fresh each call so they appear
+    // exactly once regardless of how many turns the conversation has had.
+    let system_msg = Message {
         role: "system".to_string(),
         content: SYSTEM_PROMPT.to_string(),
-    }];
+    };
+    let mut history: Vec<Message> = vec![];
 
     let stdin = io::stdin();
     let mut stdout = io::stdout();
@@ -136,7 +139,9 @@ async fn run_chat(ollama_url: String, model: Option<String>, use_copilot: bool) 
         let query_vec = rag.embed(&input)?;
         let relevant = RagStore::search_with_vec(&rag.table, &input, query_vec, TOP_K).await?;
 
-        // Prepend retrieved chunks as context so the LLM answers from documentation
+        // Build the augmented user message for this turn only — not stored in history.
+        // Keeping RAG chunks out of history ensures the doc context doesn't accumulate
+        // and re-inflate the prompt on every subsequent turn.
         let user_content = if relevant.is_empty() {
             input.clone()
         } else {
@@ -148,10 +153,12 @@ async fn run_chat(ollama_url: String, model: Option<String>, use_copilot: bool) 
             format!("Context from documentation:\n{ctx}\n\nQuestion: {input}")
         };
 
-        messages.push(Message {
-            role: "user".to_string(),
-            content: user_content,
-        });
+        // Assemble the full message list for this LLM call:
+        // system prompt (once) + bare conversation history + augmented current turn
+        let mut llm_messages = Vec::with_capacity(history.len() + 2);
+        llm_messages.push(system_msg.clone());
+        llm_messages.extend_from_slice(&history);
+        llm_messages.push(Message { role: "user".to_string(), content: user_content });
 
         // Show a spinner while waiting for the first token from the LLM
         let spinner = ProgressBar::new_spinner();
@@ -163,21 +170,18 @@ async fn run_chat(ollama_url: String, model: Option<String>, use_copilot: bool) 
         spinner.enable_steady_tick(Duration::from_millis(80));
 
         // Pass a callback that clears the spinner the moment the first token arrives
-        match client.chat(&messages, || spinner.finish_and_clear()).await {
+        match client.chat(&llm_messages, || spinner.finish_and_clear()).await {
             Ok(reply) => {
                 // Tokens were already printed by the streaming chat call; just add spacing
                 println!();
-                // Store the assistant reply so future turns have full context
-                messages.push(Message {
-                    role: "assistant".to_string(),
-                    content: reply,
-                });
+                // Store bare query + reply in history for future turns
+                history.push(Message { role: "user".to_string(), content: input });
+                history.push(Message { role: "assistant".to_string(), content: reply });
             }
             Err(e) => {
                 spinner.finish_and_clear();
                 eprintln!("Error: {e}");
-                // Remove the user message to keep history consistent with what the LLM has seen
-                messages.pop();
+                // history is untouched — the failed turn leaves no trace
             }
         }
     }
