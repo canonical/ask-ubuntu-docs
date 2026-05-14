@@ -35,6 +35,7 @@ parts:
       - libgtk-4-dev
       - libadwaita-1-dev
       - protobuf-compiler  # required by lance-encoding (transitive LanceDB dep)
+      - libprotobuf-dev    # provides google/protobuf/*.proto well-known types for protoc
     stage-packages:
       - libssl3t64
       - ca-certificates
