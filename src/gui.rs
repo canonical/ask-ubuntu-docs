@@ -192,7 +192,7 @@ fn on_send(
     }
 
     // Read the selected product and its system prompt on the GTK thread before spawning.
-    // The product prompt overrides the conversation's system prompt for this turn.
+    // The product prompt is appended to the conversation's base system prompt for this turn.
     let product = PRODUCTS
         .get(system_dropdown.selected() as usize)
         .copied()
@@ -274,13 +274,15 @@ fn on_send(
             .unwrap_or_default();
 
         // Build the augmented user message and the full LLM message list.
-        // The product prompt overrides the conversation's system prompt for this turn.
+        // The product prompt is appended to the base system prompt for this turn.
         let llm_user_content = Conversation::build_augmented_content(&query, &chunks);
         let mut messages = conversation.lock().unwrap().build_llm_messages(llm_user_content);
-        // Replace system message content with product-specific prompt if non-empty
+        // Append product-specific context to the system message rather than replacing it,
+        // so the base system prompt's constraints and output format rules are preserved.
         if !product_prompt.is_empty() {
             if let Some(sys) = messages.first_mut() {
-                sys.content = product_prompt;
+                sys.content.push('\n');
+                sys.content.push_str(&product_prompt);
             }
         }
 
