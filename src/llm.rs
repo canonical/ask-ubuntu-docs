@@ -4,6 +4,7 @@ use std::process::Command as StdCommand;
 use anyhow::{Context, Result};
 use futures_util::StreamExt;
 use reqwest::Client;
+use secret_service::{EncryptionType, SecretService};
 use serde::{Deserialize, Serialize};
 
 // Default model for --copilot when --model is not specified.
@@ -173,13 +174,14 @@ pub struct CopilotClient {
 }
 
 impl CopilotClient {
-    // Resolves the GitHub token using one of two methods (in order):
+    // Resolves the GitHub token using one of three methods (in order):
     //   1. COPILOT_TOKEN env var — use directly
-    //   2. `gh auth token` — reads the token of the currently logged-in gh CLI user
+    //   2. Secret Service (GNOME Keyring / KWallet) — looks up service=gh:github.com
+    //   3. `gh auth token` CLI — last resort for environments where gh is available
     pub async fn create(model: String) -> Result<Self> {
         let http = Client::new();
 
-        // Allow the user to supply a token directly, bypassing the gh CLI
+        // 1. Allow the user to supply a token directly, bypassing all other methods
         if let Ok(token) = std::env::var("COPILOT_TOKEN") {
             if !token.trim().is_empty() {
                 eprintln!("Using token from COPILOT_TOKEN environment variable.");
@@ -187,7 +189,13 @@ impl CopilotClient {
             }
         }
 
-        // Fall back to reading the token from the gh CLI
+        // 2. Try the system keyring (works inside snaps with the secret-service plug)
+        if let Some(token) = token_from_keyring().await {
+            eprintln!("Using token from system keyring (gh:github.com).");
+            return Ok(Self { client: http, token, model });
+        }
+
+        // 3. Fall back to the gh CLI
         let gh_output = StdCommand::new("gh")
             .args(["auth", "token"])
             .output()
@@ -384,3 +392,20 @@ where
     Ok(full_reply)
 }
 
+// Attempt to retrieve the GitHub OAuth token from the system keyring.
+// gh stores its tokens under service="gh:github.com"; we take the first
+// unlocked item found without requiring a specific account attribute.
+// Returns None silently on any error so callers can try the next fallback.
+async fn token_from_keyring() -> Option<String> {
+    let ss = SecretService::connect(EncryptionType::Dh).await.ok()?;
+    let results = ss
+        .search_items(std::collections::HashMap::from([("service", "gh:github.com")]))
+        .await
+        .ok()?;
+
+    let item = results.unlocked.into_iter().next()?;
+    let secret_bytes = item.get_secret().await.ok()?;
+    let token = String::from_utf8(secret_bytes).ok()?;
+    let token = token.trim().to_string();
+    if token.is_empty() { None } else { Some(token) }
+}
