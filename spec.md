@@ -338,6 +338,43 @@ The index snap is rebuilt and published by a CI job that runs whenever any upstr
 
 When documentation update latency becomes a user-visible problem, or when the index directory grows large enough to make main snap refresh times unacceptable (roughly above 100 MB, which corresponds to ~5–6 repositories of current size).
 
+### Required prerequisite: standalone indexer binary
+
+Before either the content snap or runtime download approach can work, the indexing logic must be extracted from `build.rs` into a standalone `ubuntu-help-indexer` binary. This is the enabling step for all index-decoupling options.
+
+**Target structure:**
+
+```
+src/
+  bin/
+    ubuntu-help-indexer.rs   ← new: all indexing logic lives here
+  vectordb.rs                ← unchanged: reads index, doesn't write it
+build.rs                     ← reduced to: create empty schema-only table for dev builds
+```
+
+The indexer binary is a thin `clap` wrapper around the functions currently in `build.rs` (doc cloning, markdown chunking, fastembed embedding, LanceDB table creation):
+
+```
+ubuntu-help-indexer [--docs-dir <path>] --output <path>
+```
+
+It clones or updates the documentation repos under `--docs-dir`, chunks and embeds them, and writes the resulting `index.lance/` directory to `--output`. It is the only component that depends on `fastembed` and the Arrow write path — the main app binary drops those dependencies entirely.
+
+**CI workflow (content snap):**
+
+```
+docs repo commit → CI runs ubuntu-help-indexer → snapcraft packs index snap → snap store refresh
+```
+
+**CI workflow (runtime download):**
+
+```
+docs repo commit → CI runs ubuntu-help-indexer → tarballs index.lance/ → uploads to CDN
+app checks for update on startup → downloads → atomically replaces $SNAP_USER_DATA/index.lance/
+```
+
+In both cases `src/vectordb.rs` is unchanged — it reads from whatever path `index_path()` resolves to and does not care who wrote the index.
+
 ---
 
 ## Stretch Goal: External Index File (mmap)
