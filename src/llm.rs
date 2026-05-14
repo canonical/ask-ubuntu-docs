@@ -6,13 +6,13 @@ use futures_util::StreamExt;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 
-// Model used when --copilot is selected. gpt-4o-mini is available on all
-// Copilot plans and supports streaming. NOTE: claude-haiku-4.5 appears in the
-// /models endpoint as "enabled" but returns HTTP 403 for streaming requests
-// (stream:true) on individual Copilot plans — non-streaming works, streaming
-// does not. claude-sonnet-4.5 supports streaming. gpt-4o-mini is the safest
-// default across all plan tiers.
-const COPILOT_MODEL: &str = "gpt-4o-mini";
+// Default model for --copilot when --model is not specified.
+// gpt-4o-mini is available on all Copilot plans and supports streaming.
+// NOTE: claude-haiku-4.5 appears in the /models endpoint as "enabled" but
+// returns HTTP 403 for streaming requests on individual Copilot plans —
+// non-streaming works, streaming does not. claude-sonnet-4.5 supports
+// streaming. gpt-4o-mini is the safest default across all plan tiers.
+pub const DEFAULT_COPILOT_MODEL: &str = "gpt-4o-mini";
 // GitHub Copilot API endpoint — supports the full range of Copilot-licensed models including Claude
 const COPILOT_API_URL: &str = "https://api.githubcopilot.com/chat/completions";
 
@@ -150,25 +150,27 @@ fn parse_ollama_chunk(line: &str) -> Result<StreamToken> {
 
 // ── Copilot client ─────────────────────────────────────────────────────────────
 
-// HTTP client wrapping the GitHub Models API (https://models.inference.ai.azure.com)
+// HTTP client wrapping the GitHub Copilot API
 pub struct CopilotClient {
     client: Client,
-    // GitHub PAT or OAuth token; used directly as a Bearer token with the GitHub Models API
+    // GitHub PAT or OAuth token; used directly as a Bearer token with the GitHub Copilot API
     token: String,
+    // Model to use for completions (e.g. "gpt-4o-mini", "claude-sonnet-4.5")
+    pub model: String,
 }
 
 impl CopilotClient {
     // Resolves the GitHub token using one of two methods (in order):
     //   1. COPILOT_TOKEN env var — use directly
     //   2. `gh auth token` — reads the token of the currently logged-in gh CLI user
-    pub async fn create() -> Result<Self> {
+    pub async fn create(model: String) -> Result<Self> {
         let http = Client::new();
 
         // Allow the user to supply a token directly, bypassing the gh CLI
         if let Ok(token) = std::env::var("COPILOT_TOKEN") {
             if !token.trim().is_empty() {
                 eprintln!("Using token from COPILOT_TOKEN environment variable.");
-                return Ok(Self { client: http, token: token.trim().to_string() });
+                return Ok(Self { client: http, token: token.trim().to_string(), model });
             }
         }
 
@@ -188,11 +190,11 @@ impl CopilotClient {
             .trim()
             .to_string();
 
-        Ok(Self { client: http, token })
+        Ok(Self { client: http, token, model })
     }
 
     async fn send_request(&self, messages: &[Message]) -> Result<reqwest::Response> {
-        let req = OpenAiChatRequest { model: COPILOT_MODEL, messages, stream: true };
+        let req = OpenAiChatRequest { model: &self.model, messages, stream: true };
         let response = self
             .client
             .post(COPILOT_API_URL)

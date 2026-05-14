@@ -10,7 +10,7 @@ use indicatif::{ProgressBar, ProgressStyle};
 mod llm;
 mod markdown;
 mod prompts;
-use llm::{CopilotClient, LlmClient, Message, OllamaClient};
+use llm::{CopilotClient, DEFAULT_COPILOT_MODEL, LlmClient, Message, OllamaClient};
 
 // Import the in-memory RAG module defined in vectordb.rs
 mod vectordb;
@@ -29,12 +29,15 @@ const SYSTEM_PROMPT: &str = include_str!("../cli-system-prompt.md");
 #[derive(Parser)]
 #[command(name = "ubuntu-desktop-help", about = "Ubuntu Desktop Help CLI")]
 struct Cli {
-    // Local Ollama model name (e.g. tinyllama, phi3:mini); mutually exclusive with --copilot
-    #[arg(long, env = "OLLAMA_MODEL", default_value = DEFAULT_MODEL, global = true, conflicts_with = "copilot")]
-    model: String,
+    // Model name to use. For Ollama (default backend): e.g. "tinyllama", "phi3:mini".
+    // For --copilot: any model available on your plan, e.g. "gpt-4o-mini",
+    // "claude-sonnet-4.5". Defaults to deepseek-r1:1.5b for Ollama and
+    // gpt-4o-mini for Copilot when not specified.
+    #[arg(long, env = "MODEL", global = true)]
+    model: Option<String>,
 
-    // Use GitHub Copilot via the GitHub Models API instead of a local model; mutually exclusive with --model
-    #[arg(long, global = true, conflicts_with = "model")]
+    // Use GitHub Copilot instead of a local Ollama model
+    #[arg(long, global = true)]
     copilot: bool,
 
     #[command(subcommand)]
@@ -72,13 +75,15 @@ async fn main() -> Result<()> {
 }
 
 // Runs the interactive chat loop, sending user input to the chosen LLM backend and printing replies
-async fn run_chat(ollama_url: String, model: String, use_copilot: bool) -> Result<()> {
+async fn run_chat(ollama_url: String, model: Option<String>, use_copilot: bool) -> Result<()> {
     // Build the appropriate LLM backend based on whether --copilot was passed
     let client = if use_copilot {
-        eprintln!("Authenticating with GitHub Copilot…");
-        LlmClient::Copilot(CopilotClient::create().await?)
+        let copilot_model = model.unwrap_or_else(|| DEFAULT_COPILOT_MODEL.to_string());
+        eprintln!("Authenticating with GitHub Copilot (model: {copilot_model})…");
+        LlmClient::Copilot(CopilotClient::create(copilot_model).await?)
     } else {
-        LlmClient::Ollama(OllamaClient::new(ollama_url, model))
+        let ollama_model = model.unwrap_or_else(|| DEFAULT_MODEL.to_string());
+        LlmClient::Ollama(OllamaClient::new(ollama_url, ollama_model))
     };
 
     // Load the RAG index (embedding model init is blocking; block_in_place lets tokio
@@ -180,12 +185,14 @@ async fn run_chat(ollama_url: String, model: String, use_copilot: bool) -> Resul
     Ok(())
 }
 
-async fn run_gui(ollama_url: String, model: String, use_copilot: bool) -> Result<()> {
+async fn run_gui(ollama_url: String, model: Option<String>, use_copilot: bool) -> Result<()> {
     let client = if use_copilot {
-        eprintln!("Authenticating with GitHub Copilot…");
-        LlmClient::Copilot(CopilotClient::create().await?)
+        let copilot_model = model.unwrap_or_else(|| DEFAULT_COPILOT_MODEL.to_string());
+        eprintln!("Authenticating with GitHub Copilot (model: {copilot_model})…");
+        LlmClient::Copilot(CopilotClient::create(copilot_model).await?)
     } else {
-        LlmClient::Ollama(OllamaClient::new(ollama_url, model))
+        let ollama_model = model.unwrap_or_else(|| DEFAULT_MODEL.to_string());
+        LlmClient::Ollama(OllamaClient::new(ollama_url, ollama_model))
     };
 
     let spinner = ProgressBar::new_spinner();
