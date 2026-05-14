@@ -239,37 +239,50 @@ A planned improvement is **hybrid search**: combining vector (semantic) ranking 
 
 ---
 
-## Stretch Goal: LanceDB Vector Database
+## Stretch Goal: LanceDB with Hybrid Search
 
 ### Context
 
-The current implementation uses brute-force cosine similarity over a flat vector index baked into the binary at build time. This is exact, fast enough for the current corpus (~8k–25k vectors), and requires no external dependencies at runtime. However it has no filtering capability: every query scores every chunk regardless of which documentation set or Ubuntu version it came from.
+The current implementation uses brute-force cosine similarity over a flat vector index baked into the binary at build time. This works well for conceptual queries but fails for exact-term queries (version numbers, release codenames) because cosine similarity is semantic — a chunk that literally says "Ubuntu 26.04 release notes" may score lower than a generic upgrade guide for the query "what's new in 26.04?".
+
+The current workaround is a per-product score multiplier (1.1×) that nudges on-topic chunks forward. This is a heuristic that can be dropped once retrieval quality improves.
+
+### Why LanceDB solves this
+
+LanceDB bundles a **Tantivy-based BM25 full-text search engine** alongside vector search, and exposes a `hybrid_search()` API that combines both rankings with Reciprocal Rank Fusion (RRF). BM25 is term-frequency aware: a chunk containing "26.04" scores near the top of the keyword ranking for any query containing "26.04", regardless of cosine similarity. Combining vector and keyword rankings with RRF gives the best of both: semantic relevance for conceptual queries, exact-match reliability for version numbers and codenames.
+
+With hybrid search delivering better intrinsic ranking, the per-product score multiplier becomes unnecessary and can be removed.
+
+### Deployment model (build-time indexing is viable)
+
+The key constraint — **no user-side indexing** — is fully compatible with LanceDB:
+
+1. **Build time** (`build.rs` or `snapcraft` build step): create a LanceDB dataset in `$OUT_DIR/index.lance/`, insert all chunks with their pre-computed vectors, and build the Tantivy FTS index. The complete `index.lance/` directory is a collection of immutable Apache Arrow fragment files — once written, no further computation is needed.
+
+2. **Snap packaging**: stage `index.lance/` into `$SNAP/share/index.lance/`. It is a static read-only asset, like any other snap data file.
+
+3. **Runtime**: open the dataset from `$SNAP/share/`. The Lance format stores data as immutable fragments. LanceDB can open a dataset in read-only mode for search queries without writing to the source directory. If a specific LanceDB version requires write access for manifest tracking, the fallback is a one-time file copy from `$SNAP/share/` to `$SNAP_USER_DATA/` on first launch — this is pure file I/O (seconds), categorically different from the forbidden re-indexing operation (10+ minutes, 10 GB RAM).
 
 ### Potential benefits
 
-- **Per-product filtering** — with multiple documentation sets indexed (Desktop, Server, Core, etc.), queries can be scoped to only the relevant product. For example, a question about snaps would query Core docs; a question about GNOME settings would query Desktop docs. This avoids irrelevant chunks polluting the context window.
-- **Per-version filtering** — chunks can be tagged with the Ubuntu version they describe (22.04, 24.04, 25.10…). At runtime the host version is read from `/etc/os-release` and queries are filtered to matching chunks, preventing outdated instructions from appearing in answers.
-- **Incremental re-indexing** — individual files can be added, updated, or removed without rebuilding the entire index. Useful if doc updates are pulled at runtime rather than at build time.
-- **ANN indexing** — LanceDB supports IVF and HNSW approximate nearest-neighbour indexes. Not beneficial at current scale, but becomes relevant above ~100k vectors.
+- **Hybrid search (BM25 + vector + RRF)** — reliable retrieval for both semantic and exact-term queries; eliminates the need for score multiplier heuristics
+- **Per-product and per-version SQL filtering** — `WHERE source LIKE '%desktop%'` as a pre-filter or post-filter; cleaner than score multiplication
+- **ANN indexing** — IVF/HNSW for approximate nearest-neighbour search; not needed at current scale but becomes relevant above ~100k vectors
+- **Incremental re-indexing** — add or remove chunks without rebuilding the entire index (useful if a CI pipeline ships index updates as snap refreshes)
 
 ### Why it is not the current approach
 
-- **First-run indexing is unacceptable for this use case.** If the index lives in `~/.local/share/`, it must be built on the user's machine. At current corpus size this takes ~10 minutes and ~10 GB of RAM — a completely unacceptable first-run experience for a help tool.
-- **External storage.** The index would live outside the binary, requiring a declared data directory in the snap (`$SNAP_USER_DATA`) and making the snap no longer fully self-contained.
-- **Larger binary and longer builds.** LanceDB depends on Apache Arrow and DataFusion, adding ~20–40 MB to the binary and several minutes to cold compile times.
-- **No net gain at current scale.** Brute-force cosine over ~25k vectors takes microseconds; ANN indexes provide no perceptible speedup.
+- **Build dependency weight.** LanceDB depends on Apache Arrow, DataFusion, and Tantivy, adding ~20–40 MB to the binary (or snap asset) and several minutes to cold compile times.
+- **No net gain at current scale for vector search.** Brute-force cosine over ~10k vectors takes microseconds; ANN provides no perceptible speedup.
+- **Hand-rolled hybrid search is sufficient short-term.** A simple keyword-overlap + RRF implementation in ~80 lines of Rust (no new dependencies) addresses the exact-term query failure adequately while the codebase is still small.
 
 ### When it would become worthwhile
 
-If the indexing pipeline is ever moved to a **separate offline build step** (e.g. a CI job that publishes a pre-built `index.lance` as a snap asset or OCI layer), then the first-run cost is eliminated and the filtering benefits become available without user-visible impact. Until that infrastructure exists, the embedded binary index is strictly preferable.
+When the corpus grows beyond ~5 repositories (index > ~150 MB), making the embedded binary approach impractical, LanceDB becomes the natural replacement: the index moves to a snap asset, hybrid search replaces the score multiplier, and filtering replaces the per-product boost. The transition is clean because the index format changes but the surrounding pipeline (`build.rs` → snap → runtime open) does not.
 
 ---
 
-
-
-### Context
-
-The current implementation embeds the vector index directly into the binary at build time using `include_bytes!`. This keeps deployment simple (single self-contained binary) and works well up to ~3 documentation repositories (~80 MB index, ~82 MB binary).
+## Stretch Goal: External Index File (mmap)
 
 As more documentation sources are added, binary size and build-time RAM grow linearly: roughly 15 MB of index and 10 GB of peak build RAM per repository of similar size. Beyond ~5 repositories the embedded approach becomes impractical.
 
