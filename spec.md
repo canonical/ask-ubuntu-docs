@@ -137,7 +137,7 @@ A planned improvement is **hybrid search**: combining vector (semantic) ranking 
 - The user selects their preferred backend via a CLI flag; local and cloud options are both first-class
 - Supported backends:
   - **Local — Ollama** (`--model <name>`): connects to a locally running Ollama instance; default backend; no account or internet access required
-  - **Cloud — GitHub Copilot / GitHub Models** (`--copilot`): uses the GitHub Models API; requires a GitHub account with Copilot access; model is selected by GitHub
+  - **Cloud — GitHub Copilot / GitHub Models** (`--copilot`): uses the `api.githubcopilot.com` chat completions endpoint; requires a GitHub account with Copilot access; defaults to `gpt-4o-mini` which supports streaming on all individual Copilot plans. **Note:** `claude-haiku-4.5` appears as `enabled` in the `/models` list but returns HTTP 403 for streaming requests on individual plans — use `claude-sonnet-4.5` or a GPT model if Claude streaming is needed.
   - **Cloud — OpenAI-compatible API** (future): any provider exposing an OpenAI-compatible `/v1/chat/completions` endpoint (OpenAI, Anthropic via proxy, Mistral, etc.) configurable via `--api-url` and `--api-key`
 - The RAG pipeline is identical regardless of backend — only the final LLM call differs
 

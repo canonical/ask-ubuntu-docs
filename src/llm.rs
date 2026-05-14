@@ -6,8 +6,13 @@ use futures_util::StreamExt;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 
-// Model used when --copilot is selected; claude-haiku-4.5 is fast and available on all Copilot plans
-const COPILOT_MODEL: &str = "claude-haiku-4.5";
+// Model used when --copilot is selected. gpt-4o-mini is available on all
+// Copilot plans and supports streaming. NOTE: claude-haiku-4.5 appears in the
+// /models endpoint as "enabled" but returns HTTP 403 for streaming requests
+// (stream:true) on individual Copilot plans — non-streaming works, streaming
+// does not. claude-sonnet-4.5 supports streaming. gpt-4o-mini is the safest
+// default across all plan tiers.
+const COPILOT_MODEL: &str = "gpt-4o-mini";
 // GitHub Copilot API endpoint — supports the full range of Copilot-licensed models including Claude
 const COPILOT_API_URL: &str = "https://api.githubcopilot.com/chat/completions";
 
