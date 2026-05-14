@@ -243,16 +243,30 @@ fn on_send(
         Arc::clone(conversation),
     );
     tokio_handle.spawn(async move {
+        // Build the RAG search query: prepend the last assistant reply (if any) so that
+        // follow-up questions like "how do I install it?" resolve to the right topic.
+        // Only the previous assistant turn is used — enough context without growing unboundedly.
+        // The bare user query is still what gets stored in history.
+        let rag_query = {
+            let conv = conversation.lock().unwrap();
+            match conv.last() {
+                Some(last) if last.role == "assistant" => {
+                    format!("{}\n\n{query}", last.content)
+                }
+                _ => query.clone(),
+            }
+        };
+
         // CPU-bound: embed query synchronously, then clone the table handle for the async search.
         let (query_vec, table) = tokio::task::block_in_place(|| {
             let mut rag = rag.lock().unwrap();
-            let vec = rag.embed(&query).unwrap_or_default();
+            let vec = rag.embed(&rag_query).unwrap_or_default();
             let tbl = rag.table.clone();
             (vec, tbl)
         });
 
         // Async: LanceDB hybrid (vector + BM25) search
-        let relevant = RagStore::search_with_vec(&table, &query, query_vec, TOP_K)
+        let relevant = RagStore::search_with_vec(&table, &rag_query, query_vec, TOP_K)
             .await
             .unwrap_or_default();
 

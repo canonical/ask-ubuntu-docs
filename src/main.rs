@@ -135,9 +135,20 @@ async fn run_chat(ollama_url: String, model: Option<String>, use_copilot: bool) 
             break;
         }
 
+        // Build the RAG search query: prepend the last assistant reply (if any) so that
+        // follow-up questions like "how do I install it?" resolve to the right topic.
+        // Only the previous assistant turn is used — enough context without growing unboundedly.
+        // The bare user input is still what gets stored in history.
+        let rag_query = match history.last() {
+            Some(last) if last.role == "assistant" => {
+                format!("{}\n\n{input}", last.content)
+            }
+            _ => input.clone(),
+        };
+
         // Retrieve the most relevant doc chunks for this query via hybrid search
-        let query_vec = rag.embed(&input)?;
-        let relevant = RagStore::search_with_vec(&rag.table, &input, query_vec, TOP_K).await?;
+        let query_vec = rag.embed(&rag_query)?;
+        let relevant = RagStore::search_with_vec(&rag.table, &rag_query, query_vec, TOP_K).await?;
 
         // Build the augmented user message for this turn only — not stored in history.
         // Keeping RAG chunks out of history ensures the doc context doesn't accumulate

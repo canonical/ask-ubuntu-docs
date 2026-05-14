@@ -436,3 +436,54 @@ The `pulldown-cmark` event stream already distinguishes `Tag::CodeBlock(CodeBloc
 ### When to implement
 
 When the LLM backend is wired up and real responses are flowing through the GUI, making code block quality visible and worth the added complexity.
+
+---
+
+## Stretch Goal: LLM-Based Query Rewriting
+
+### Problem
+
+The current approach to follow-up question disambiguation (Option A) prepends the **last assistant reply** to the RAG search query before embedding. This handles most ambiguous follow-ups ("how do I install it?") by giving the retriever enough context to find the right topic.
+
+It has two limitations:
+1. The previous assistant reply can be long (several paragraphs), which dilutes the embedding and may push the actual question out of the high-similarity region.
+2. It does not work well when the relevant context is more than one turn back (e.g. a three-step thread where the topic was established two turns ago).
+
+### Proposed approach (Option C)
+
+Before performing RAG retrieval, send a lightweight LLM call to **rewrite the current user query into a standalone, self-contained question** that a retriever could answer without any conversation history.
+
+```
+System: You are a query rewriting assistant. Given a conversation history and a new user message, rewrite the user message into a single, self-contained question that can be answered without any prior context. Output only the rewritten question, nothing else.
+
+History:
+  User: what's zig?
+  Assistant: Zig is a programming language...
+
+New message: how do i install it?
+
+→ How do I install the Zig programming language?
+```
+
+The rewritten query replaces the original for RAG embedding and BM25 search only. The original user message is still what gets sent to the main LLM and stored in conversation history.
+
+### Trade-offs
+
+| | Option A (current) | Option C (this goal) |
+|---|---|---|
+| Latency | None (no extra LLM call) | +1 fast LLM round-trip per turn |
+| Quality on simple follow-ups | Good | Excellent |
+| Quality on multi-turn threads | Degrades after 2+ turns | Consistent |
+| Complexity | Minimal | Requires second LLM client call |
+| Offline friendliness | Full | Requires model capable of instruction following (already required for main call) |
+
+### Implementation notes
+
+- Use a small, fast model for rewriting (e.g. same Ollama model as the main call; the task is trivial)
+- Only rewrite when `history` is non-empty; if it is the first turn, skip the rewrite and embed directly
+- The rewrite call is fire-and-forget with a short timeout (e.g. 3 s); if it fails or times out, fall back to Option A gracefully
+- The rewrite prompt and timeout should be configurable constants, not hardcoded magic strings
+
+### When to implement
+
+After Option A proves insufficient in practice — i.e. when users report that multi-turn follow-ups still retrieve wrong documentation despite the previous-reply prefix.
