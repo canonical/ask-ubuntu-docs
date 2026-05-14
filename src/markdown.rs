@@ -103,11 +103,6 @@ pub fn to_pango(markdown: &str) -> String {
             }
 
             Event::Code(code) => {
-                // Ensure inline code doesn't run into the preceding text when the LLM
-                // omits the space before a backtick (e.g. `):` immediately followed by `cmd`).
-                if out.chars().last().map_or(false, |c| !c.is_whitespace()) {
-                    out.push(' ');
-                }
                 out.push_str(&format!("<tt>{}</tt>", escape_xml(&code)));
             }
 
