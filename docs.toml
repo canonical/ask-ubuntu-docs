@@ -7,4 +7,6 @@ repos = [
     "https://github.com/canonical/ubuntu-server-documentation",
     "https://github.com/canonical/ubuntu-core-docs",
     "https://github.com/ubuntu/ubuntu-release-notes/",
+    "https://github.com/canonical/ubuntu-pro-for-wsl/",
+    "https://github.com/ubuntu/ubuntu-project-docs/",
 ]
