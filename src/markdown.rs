@@ -49,7 +49,11 @@ pub fn to_pango(markdown: &str) -> String {
             }
             Event::End(TagEnd::CodeBlock) => {
                 in_code -= 1;
-                out.push_str("</tt>\n\n");
+                // Guarantee a line break after the block before any following content.
+                if !out.ends_with('\n') {
+                    out.push('\n');
+                }
+                out.push_str("</tt>\n");
             }
 
             Event::Start(Tag::List(start)) => {
