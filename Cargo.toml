@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 anyhow = "1"
+arrow-array = "58"
 bytes = "1.11.1"
 clap = { version = "4.5", features = ["derive", "env"] }
 fastembed = { version = "5", default-features = false, features = ["ort-download-binaries-native-tls", "hf-hub-native-tls"] }
@@ -13,6 +14,8 @@ gtk = { package = "gtk4", version = "0.9", features = ["v4_18"] }
 adw = { package = "libadwaita", version = "0.7", features = ["v1_6"] }
 async-channel = "2"
 indicatif = "0.17"
+lance-index = "0.29"
+lancedb = "0.29"
 pulldown-cmark = "0.11"
 reqwest = { version = "0.12", features = ["json", "stream"] }
 serde = { version = "1", features = ["derive"] }
@@ -22,8 +25,12 @@ tokio = { version = "1", features = ["full"] }
 
 [build-dependencies]
 anyhow = "1"
+arrow-array = "58"
+arrow-schema = "58"
 fastembed = { version = "5", default-features = false, features = ["ort-download-binaries-native-tls", "hf-hub-native-tls"] }
+lancedb = "0.29"
 pulldown-cmark = "0.11"
 serde = { version = "1", features = ["derive"] }
 text-splitter = "0.14"
 toml = "0.8"
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }

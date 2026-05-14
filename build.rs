@@ -1,19 +1,20 @@
 use std::collections::HashMap;
 use std::env;
-use std::fs::{self, File};
-use std::io::Write;
+use std::fs;
 use std::path::Path;
 use std::process::Command;
+use std::sync::Arc;
 
+use arrow_array::{types::Float32Type, FixedSizeListArray, RecordBatch, StringArray};
+use arrow_schema::{DataType, Field, Schema};
 use fastembed::{EmbeddingModel, InitOptions, TextEmbedding};
+use lancedb::index::{scalar::FtsIndexBuilder, Index};
 use pulldown_cmark::{Event, Options, Parser, Tag, TagEnd};
 use serde::Deserialize;
 use text_splitter::TextSplitter;
 
 // Maximum characters per chunk; keeps each chunk within a useful slice of LLM context
 const CHUNK_SIZE: usize = 512;
-// Output dimension of BGE-small-en-v1.5; written into the index header so the runtime can verify
-const EMBEDDING_DIM: usize = 384;
 
 #[derive(Deserialize)]
 struct DocsConfig {
@@ -44,6 +45,10 @@ fn load_docs_config() -> anyhow::Result<Vec<(String, String)>> {
 }
 
 fn main() -> anyhow::Result<()> {
+    tokio::runtime::Runtime::new()?.block_on(run())
+}
+
+async fn run() -> anyhow::Result<()> {
     // Re-run this build script when build.rs or docs.toml changes.
     // We intentionally do NOT watch docs/ here: since we clone into docs/ ourselves,
     // watching it would cause an infinite rebuild loop.
@@ -51,7 +56,7 @@ fn main() -> anyhow::Result<()> {
     println!("cargo:rerun-if-changed=docs.toml");
 
     let out_dir = env::var("OUT_DIR")?;
-    let index_path = Path::new(&out_dir).join("index.bin");
+    let lancedb_path = Path::new(&out_dir).join("index.lance");
 
     // In debug builds, skip cloning and embedding entirely — write an empty index
     // so the app compiles and runs (with no RAG context). Use `cargo build --release`
@@ -59,7 +64,7 @@ fn main() -> anyhow::Result<()> {
     let profile = env::var("PROFILE").unwrap_or_default();
     if profile == "debug" {
         println!("cargo:warning=Debug build: skipping doc cloning and vectorisation (empty RAG index).");
-        write_index(&index_path, EMBEDDING_DIM, &[], &[])?;
+        create_lancedb_index(&lancedb_path, &[], &[]).await?;
         return Ok(());
     }
 
@@ -70,7 +75,7 @@ fn main() -> anyhow::Result<()> {
 
     if chunks.is_empty() {
         println!("cargo:warning=No markdown files found in docs/; RAG index will be empty.");
-        write_index(&index_path, EMBEDDING_DIM, &[], &[])?;
+        create_lancedb_index(&lancedb_path, &[], &[]).await?;
         return Ok(());
     }
 
@@ -86,12 +91,11 @@ fn main() -> anyhow::Result<()> {
     let texts: Vec<String> = chunks.iter().map(|c| c.text.clone()).collect();
     let embeddings = embedder.embed(texts, None)?;
 
-    write_index(&index_path, EMBEDDING_DIM, &chunks, &embeddings)?;
+    create_lancedb_index(&lancedb_path, &chunks, &embeddings).await?;
 
     println!(
-        "cargo:warning=RAG index ready: {} vectors ({} dims).",
-        chunks.len(),
-        EMBEDDING_DIM
+        "cargo:warning=RAG index ready: {} vectors (384 dims).",
+        chunks.len()
     );
 
     Ok(())
@@ -422,32 +426,64 @@ fn markdown_to_plain_text(markdown: &str) -> String {
     text
 }
 
-// Binary index format written to $OUT_DIR/index.bin and embedded by include_bytes! at runtime:
-//   dim       u64 le   — embedding dimension (384 for BGE-small)
-//   n_chunks  u64 le   — number of entries
-//   per entry:
-//     src_len u64 le + src_bytes   — source file path
-//     txt_len u64 le + txt_bytes   — chunk plain text
-//     dim × f32 le                 — embedding vector
-fn write_index(
+// Creates a LanceDB table at `path` with schema {source, text, vector}.
+// For debug builds, pass empty slices to create a schema-only table (no rows, no FTS index).
+// For release builds, populates the table with chunks + embeddings and builds an FTS index.
+async fn create_lancedb_index(
     path: &Path,
-    dim: usize,
     chunks: &[Chunk],
     embeddings: &[Vec<f32>],
 ) -> anyhow::Result<()> {
-    let mut f = File::create(path)?;
-    f.write_all(&(dim as u64).to_le_bytes())?;
-    f.write_all(&(chunks.len() as u64).to_le_bytes())?;
-    for (chunk, vec) in chunks.iter().zip(embeddings.iter()) {
-        let src = chunk.source.as_bytes();
-        f.write_all(&(src.len() as u64).to_le_bytes())?;
-        f.write_all(src)?;
-        let txt = chunk.text.as_bytes();
-        f.write_all(&(txt.len() as u64).to_le_bytes())?;
-        f.write_all(txt)?;
-        for val in vec {
-            f.write_all(&val.to_le_bytes())?;
-        }
+    // BGE-small-en-v1.5 output dimension
+    const DIM: i32 = 384;
+
+    if path.exists() {
+        fs::remove_dir_all(path)?;
     }
+
+    let schema = Arc::new(Schema::new(vec![
+        Field::new("source", DataType::Utf8, false),
+        Field::new("text", DataType::Utf8, false),
+        Field::new(
+            "vector",
+            DataType::FixedSizeList(Arc::new(Field::new("item", DataType::Float32, true)), DIM),
+            false,
+        ),
+    ]));
+
+    let batch = if chunks.is_empty() {
+        RecordBatch::new_empty(schema.clone())
+    } else {
+        let sources = Arc::new(StringArray::from(
+            chunks.iter().map(|c| c.source.as_str()).collect::<Vec<_>>(),
+        ));
+        let texts = Arc::new(StringArray::from(
+            chunks.iter().map(|c| c.text.as_str()).collect::<Vec<_>>(),
+        ));
+        let vectors = Arc::new(FixedSizeListArray::from_iter_primitive::<Float32Type, _, _>(
+            embeddings
+                .iter()
+                .map(|v| Some(v.iter().map(|&f| Some(f)))),
+            DIM,
+        ));
+        RecordBatch::try_new(schema.clone(), vec![sources, texts, vectors])?
+    };
+
+    let path_str = path
+        .to_str()
+        .ok_or_else(|| anyhow::anyhow!("LanceDB path is not valid UTF-8"))?;
+    let db = lancedb::connect(path_str).execute().await?;
+    let tbl = db
+        .create_table("docs", vec![batch])
+        .execute()
+        .await?;
+
+    // Only build the FTS index when there is actual content to index.
+    if !chunks.is_empty() {
+        tbl.create_index(&["text"], Index::FTS(FtsIndexBuilder::default()))
+            .execute()
+            .await?;
+    }
+
     Ok(())
 }

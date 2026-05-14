@@ -90,7 +90,7 @@ async fn run_chat(ollama_url: String, model: String, use_copilot: bool) -> Resul
             .unwrap(),
     );
     spinner.enable_steady_tick(Duration::from_millis(80));
-    let mut rag = tokio::task::block_in_place(RagStore::load)?;
+    let mut rag = RagStore::load().await?;
     spinner.finish_and_clear();
 
     // System prompt contains only role instructions; doc context is injected per-query via RAG
@@ -127,8 +127,9 @@ async fn run_chat(ollama_url: String, model: String, use_copilot: bool) -> Resul
             break;
         }
 
-        // Retrieve the most relevant doc chunks for this query via cosine similarity
-        let relevant = tokio::task::block_in_place(|| rag.search(&input, TOP_K, None))?;
+        // Retrieve the most relevant doc chunks for this query via hybrid search
+        let query_vec = rag.embed(&input)?;
+        let relevant = RagStore::search_with_vec(&rag.table, &input, query_vec, TOP_K).await?;
 
         // Prepend retrieved chunks as context so the LLM answers from documentation
         let user_content = if relevant.is_empty() {
@@ -194,7 +195,7 @@ async fn run_gui(ollama_url: String, model: String, use_copilot: bool) -> Result
             .unwrap(),
     );
     spinner.enable_steady_tick(Duration::from_millis(80));
-    let rag = tokio::task::block_in_place(RagStore::load)?;
+    let rag = RagStore::load().await?;
     spinner.finish_and_clear();
 
     let conversation = Arc::new(Mutex::new(vec![Message {

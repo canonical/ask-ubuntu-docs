@@ -184,7 +184,6 @@ fn on_send(
         .copied()
         .unwrap_or("Desktop");
     let system_prompt = prompts::get_prompt(product).to_string();
-    let doc_prefix = prompts::source_prefix(product).map(str::to_string);
     input.set_text("");
     input.set_sensitive(false);
     send_btn.set_sensitive(false);
@@ -244,12 +243,18 @@ fn on_send(
         Arc::clone(conversation),
     );
     tokio_handle.spawn(async move {
-        // RAG search is CPU-bound; block_in_place prevents starving other tokio tasks
-        let relevant = tokio::task::block_in_place(|| {
-            rag.lock().unwrap()
-                .search(&query, TOP_K, doc_prefix.as_deref())
-                .unwrap_or_default()
+        // CPU-bound: embed query synchronously, then clone the table handle for the async search.
+        let (query_vec, table) = tokio::task::block_in_place(|| {
+            let mut rag = rag.lock().unwrap();
+            let vec = rag.embed(&query).unwrap_or_default();
+            let tbl = rag.table.clone();
+            (vec, tbl)
         });
+
+        // Async: LanceDB hybrid (vector + BM25) search
+        let relevant = RagStore::search_with_vec(&table, &query, query_vec, TOP_K)
+            .await
+            .unwrap_or_default();
 
         // RAG context is injected into the LLM call for this turn only.
         // The bare query (without doc chunks) is what gets stored in history,

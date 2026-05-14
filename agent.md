@@ -279,3 +279,17 @@ Implement `OllamaBackend`, `LlamaCppBackend`, and a `MockBackend` for tests. The
 - Do not add new dependencies without checking they compile in a no-std or snap-constrained context first
 - Avoid generating large blocks of commented-out code
 - When in doubt, refer back to `spec.md` before adding new behaviour
+
+---
+
+## System Package Dependencies
+
+This project requires certain system packages (e.g. `protobuf-compiler` for LanceDB's `lance-encoding` crate).
+**Agents do not have `sudo` access.** If a build fails because a system package is missing, stop and ask the user to install it:
+
+```
+sudo apt-get install -y <package-name>
+```
+
+Known required packages:
+- `protobuf-compiler` — required by `lance-encoding` (transitive LanceDB dependency)
