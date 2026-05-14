@@ -280,6 +280,15 @@ Implement `OllamaBackend`, `LlamaCppBackend`, and a `MockBackend` for tests. The
 - Avoid generating large blocks of commented-out code
 - When in doubt, refer back to `spec.md` before adding new behaviour
 
+### GUI ↔ CLI feature parity
+
+The GUI (`src/gui.rs`) and the CLI (`src/main.rs`) share the same backend logic (RAG, LLM, history). **Whenever you change the behaviour of one interface, apply the equivalent change to the other** — unless the change is genuinely interface-specific (e.g. a widget layout tweak, or a terminal escape code). The only thing that should differ between the two is how input is gathered and output is displayed.
+
+Concretely:
+- A bug fixed in `run_chat()` should also be fixed in the GUI's message-send handler, and vice versa.
+- A new feature (e.g. RAG query contextualisation, history trimming, model selection) must land in both.
+- If the change truly cannot be applied to the other interface, leave a `// TODO(parity):` comment explaining why.
+
 ---
 
 ## System Package Dependencies
