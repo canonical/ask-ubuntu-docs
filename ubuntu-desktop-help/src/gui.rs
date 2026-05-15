@@ -80,7 +80,9 @@ fn build_ui(
         .default_height(600)
         .build();
 
-    // Message list — new bubbles are appended here
+    // Message list — new bubbles are appended here.
+    // AccessibleRole::Log marks this as a live region so screen readers
+    // automatically announce new messages as they are appended.
     let message_list = Box::builder()
         .orientation(Orientation::Vertical)
         .spacing(8)
@@ -88,6 +90,7 @@ fn build_ui(
         .margin_bottom(12)
         .margin_start(12)
         .margin_end(12)
+        .accessible_role(gtk::AccessibleRole::Log)
         .build();
 
     let scroll = ScrolledWindow::builder()
