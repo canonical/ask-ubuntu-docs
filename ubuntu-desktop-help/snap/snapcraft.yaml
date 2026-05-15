@@ -1,7 +1,7 @@
 name: ubuntu-desktop-help
 base: core26
 build-base: devel
-version: '0.4.2'
+version: '0.5.0'
 summary: AI-powered Ubuntu Desktop help app
 description: |
   An interactive CLI tool that answers questions about Ubuntu

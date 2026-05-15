@@ -1,6 +1,6 @@
 [package]
 name = "ubuntu-desktop-help"
-version = "0.4.2"
+version = "0.5.0"
 edition = "2024"
 
 [dependencies]
@@ -23,4 +23,3 @@ serde_json = "1"
 toml = "0.8"
 tokio = { version = "1", features = ["full"] }
 secret-service = { version = "5.1.0", features = ["rt-tokio-crypto-rust"] }
-
