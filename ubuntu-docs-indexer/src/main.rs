@@ -426,6 +426,9 @@ fn compress_index(index_dir: &Path, dest: &Path) -> anyhow::Result<()> {
         .map_err(|e| anyhow::anyhow!("failed to create {}: {e}", dest.display()))?;
     let gz = GzEncoder::new(file, Compression::best());
     let mut tar = tar::Builder::new(gz);
+    // Store files with uid/gid 0 so the archive is portable across systems
+    // with different user databases (e.g. snap build containers).
+    tar.mode(tar::HeaderMode::Deterministic);
     // Archive the directory under its own name (e.g. "index.lance/...")
     let dir_name = index_dir
         .file_name()
