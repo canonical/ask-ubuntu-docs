@@ -1,0 +1,7 @@
+#!/bin/sh
+# Refreshes the writable RAG index copy in $SNAP_COMMON from the updated
+# snap image. Runs automatically after every snap refresh so the index
+# stays in sync with the installed snap revision.
+set -e
+rm -rf "$SNAP_COMMON/index.lance"
+cp -r "$SNAP/index.lance" "$SNAP_COMMON/index.lance"

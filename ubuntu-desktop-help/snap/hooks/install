@@ -1,0 +1,7 @@
+#!/bin/sh
+# Copies the bundled RAG index from the read-only snap image to writable
+# $SNAP_COMMON so that LanceDB can open it (LanceDB needs write access even
+# for read-only queries). Runs once on first install.
+set -e
+rm -rf "$SNAP_COMMON/index.lance"
+cp -r "$SNAP/index.lance" "$SNAP_COMMON/index.lance"

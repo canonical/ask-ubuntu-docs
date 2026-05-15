@@ -9,16 +9,17 @@ description: |
   a local Ollama backend and the GitHub Copilot / GitHub Models API.
 
   A pre-built documentation index (index.lance) is downloaded from the latest
-  GitHub release during snap build and baked into the snap. To use a custom
-  index at runtime, set UBUNTU_HELP_INDEX_PATH or place it at
-  $SNAP_USER_DATA/index.lance.
+  GitHub release during snap build and copied to writable storage on install.
+  To use a custom index, place it at $SNAP_USER_DATA/index.lance.
 
 grade: devel
 confinement: strict
 
 apps:
   ubuntu-desktop-help:
-    command: local/bin/launcher.sh
+    command: usr/bin/ubuntu-desktop-help
+    environment:
+      UBUNTU_HELP_INDEX_PATH: $SNAP_COMMON/index.lance
     plugs:
       - network          # Ollama / Copilot API calls
       - home             # reading config/token files under $HOME
@@ -50,14 +51,6 @@ parts:
       - libcairo2
       - libpango-1.0-0
       - libgdk-pixbuf-2.0-0
-
-  launcher:
-    plugin: dump
-    source: snap/local
-    organize:
-      launcher.sh: local/bin/launcher.sh
-    stage:
-      - local/bin/launcher.sh
 
   rag-index:
     # Downloads the pre-built documentation index from the latest GitHub release
