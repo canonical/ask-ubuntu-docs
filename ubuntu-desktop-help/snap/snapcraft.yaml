@@ -61,9 +61,19 @@ parts:
     build-environment:
       - INDEX_REPO_URL: "https://github.com/msuchane/hackathon-desktop-help"
     override-build: |
-      curl -fsSL \
-        "${INDEX_REPO_URL}/releases/latest/download/index.lance.tar.gz" \
-        -o index.lance.tar.gz
+      REPO=$(echo "${INDEX_REPO_URL}" | sed 's|https://github.com/||')
+      ASSET_URL=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases" \
+        | python3 -c "
+import sys, json
+releases = json.load(sys.stdin)
+for release in releases:
+    for asset in release.get('assets', []):
+        if asset['name'] == 'index.lance.tar.gz':
+            print(asset['browser_download_url'])
+            sys.exit(0)
+sys.exit(1)
+")
+      curl -fsSL "${ASSET_URL}" -o index.lance.tar.gz
       tar -xzf index.lance.tar.gz
       mkdir -p target
       mv index.lance target/index.lance
