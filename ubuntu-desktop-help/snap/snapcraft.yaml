@@ -18,7 +18,7 @@ confinement: strict
 
 apps:
   ubuntu-desktop-help:
-    command: usr/bin/ubuntu-desktop-help
+    command: bin/launcher.sh
     plugs:
       - network          # Ollama / Copilot API calls
       - home             # reading config/token files under $HOME
@@ -50,6 +50,14 @@ parts:
       - libcairo2
       - libpango-1.0-0
       - libgdk-pixbuf-2.0-0
+
+  launcher:
+    plugin: dump
+    source: snap/local
+    organize:
+      launcher.sh: bin/launcher.sh
+    stage:
+      - bin/launcher.sh
 
   rag-index:
     # Downloads the pre-built documentation index from the latest GitHub release
