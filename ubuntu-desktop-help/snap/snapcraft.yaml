@@ -74,7 +74,7 @@ for release in releases:
 sys.exit(1)
 ")
       curl -fsSL "${ASSET_URL}" -o index.lance.tar.gz
-      tar -xzf index.lance.tar.gz
+      tar --no-same-owner -xzf index.lance.tar.gz
       mkdir -p target
       mv index.lance target/index.lance
     organize:
