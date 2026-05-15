@@ -65,4 +65,7 @@ parts:
         "${INDEX_REPO_URL}/releases/latest/download/index.lance.tar.gz" \
         -o index.lance.tar.gz
       tar -xzf index.lance.tar.gz
-      cp -r index.lance "$CRAFT_PART_INSTALL/index.lance"
+      mkdir -p target
+      mv index.lance target/index.lance
+    organize:
+      target/index.lance: index.lance
