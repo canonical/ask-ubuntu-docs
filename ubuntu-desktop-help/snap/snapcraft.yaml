@@ -53,12 +53,15 @@ parts:
   rag-index:
     # Downloads the pre-built documentation index from the latest GitHub release
     # and stages it at $SNAP/index.lance for runtime use.
+    # Override INDEX_REPO_URL at build time to use a different repository.
     plugin: nil
     build-packages:
       - curl
+    build-environment:
+      - INDEX_REPO_URL: "https://github.com/msuchane/hackathon-desktop-help"
     override-build: |
       curl -fsSL \
-        "https://github.com/msuchane/hackathon-desktop-help/releases/latest/download/index.lance.tar.gz" \
+        "${INDEX_REPO_URL}/releases/latest/download/index.lance.tar.gz" \
         -o index.lance.tar.gz
       tar -xzf index.lance.tar.gz
       cp -r index.lance "$CRAFT_PART_INSTALL/index.lance"
