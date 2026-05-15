@@ -53,7 +53,8 @@ parts:
   rag-index:
     # Downloads the pre-built documentation index from the latest GitHub release
     # and stages it at $SNAP/index.lance for runtime use.
-    # Override INDEX_REPO_URL at build time to use a different repository.
+    # To use a different repository, override INDEX_REPO_URL at build time:
+    #   snapcraft --build-environment-variable INDEX_REPO_URL=https://github.com/other/repo
     plugin: nil
     build-packages:
       - curl
