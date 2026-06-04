@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Ubuntu Desktop Help
+Comment=AI-powered help for Ubuntu Desktop
+Exec=ubuntu-desktop-help gui --copilot
+Icon=${SNAP}/meta/gui/icon.png
+Categories=GNOME;GTK;Utility;
+StartupNotify=true
+Terminal=false
