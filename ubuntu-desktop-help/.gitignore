@@ -9,3 +9,6 @@
 
 # fastembed model cache
 /.fastembed_cache/
+
+# Ignore built snaps
+*.snap
