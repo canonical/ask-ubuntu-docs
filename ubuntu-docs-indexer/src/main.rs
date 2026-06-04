@@ -2,6 +2,7 @@ use flate2::write::GzEncoder;
 use flate2::Compression;
 use std::collections::HashMap;
 use std::fs;
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::Arc;
@@ -57,6 +58,7 @@ async fn main() -> anyhow::Result<()> {
     if chunks.is_empty() {
         eprintln!("Warning: no markdown files found in {}; index will be empty.", cli.docs_dir.display());
         create_lancedb_index(&cli.output, &[], &[]).await?;
+        fix_index_permissions(&cli.output)?;
         return Ok(());
     }
 
@@ -87,6 +89,7 @@ async fn main() -> anyhow::Result<()> {
     pb.finish_with_message("embedding done");
 
     create_lancedb_index(&cli.output, &chunks, &embeddings).await?;
+    fix_index_permissions(&cli.output)?;
 
     eprintln!(
         "RAG index written to {}: {} vectors (384 dims).",
@@ -420,9 +423,30 @@ fn markdown_to_plain_text(markdown: &str) -> String {
     text
 }
 
+/// Recursively sets index directory permissions to 0755 (dirs) and 0644 (files)
+/// so the index is readable by any user regardless of the umask in effect when
+/// LanceDB wrote the files (LanceDB uses 0600 by default).
+fn fix_index_permissions(dir: &Path) -> anyhow::Result<()> {
+    for entry in fs::read_dir(dir)
+        .map_err(|e| anyhow::anyhow!("failed to read {}: {e}", dir.display()))?
+    {
+        let entry = entry?;
+        let path = entry.path();
+        let mode = if path.is_dir() { 0o755 } else { 0o644 };
+        fs::set_permissions(&path, fs::Permissions::from_mode(mode))
+            .map_err(|e| anyhow::anyhow!("failed to chmod {}: {e}", path.display()))?;
+        if path.is_dir() {
+            fix_index_permissions(&path)?;
+        }
+    }
+    // Also fix the top-level directory itself
+    fs::set_permissions(dir, fs::Permissions::from_mode(0o755))
+        .map_err(|e| anyhow::anyhow!("failed to chmod {}: {e}", dir.display()))?;
+    Ok(())
+}
+
 /// Compresses `index_dir` into a `.tar.gz` archive at `dest`.
-fn compress_index(index_dir: &Path, dest: &Path) -> anyhow::Result<()> {
-    let file = fs::File::create(dest)
+fn compress_index(index_dir: &Path, dest: &Path) -> anyhow::Result<()> {    let file = fs::File::create(dest)
         .map_err(|e| anyhow::anyhow!("failed to create {}: {e}", dest.display()))?;
     let gz = GzEncoder::new(file, Compression::best());
     let mut tar = tar::Builder::new(gz);
