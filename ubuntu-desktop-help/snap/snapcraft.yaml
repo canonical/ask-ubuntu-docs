@@ -62,7 +62,7 @@ parts:
     build-packages:
       - curl
     build-environment:
-      - INDEX_REPO_URL: "https://github.com/msuchane/hackathon-desktop-help"
+      - INDEX_REPO_URL: "https://github.com/msuchane/ubuntu-docs-indexer"
     override-build: |
       curl -fsSL \
         "${INDEX_REPO_URL}/releases/latest/download/index.lance.tar.gz" \
