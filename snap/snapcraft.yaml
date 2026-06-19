@@ -13,6 +13,7 @@ description: |
   GitHub release during snap build and copied to writable storage on install.
   To use a custom index, place it at $SNAP_USER_DATA/index.lance.
 
+license: GPL-3.0+
 grade: devel
 confinement: strict
 
