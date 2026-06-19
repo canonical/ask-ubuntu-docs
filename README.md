@@ -12,7 +12,7 @@ The app is written in Rust with the help of Copilot and Claude. It has a GTK4 gr
 
 ## Run the app with GitHub Copilot
 
-Use this mode to for a remote model via the GitHub Models API.
+Use this mode for a remote model via the GitHub Models API.
 
 This can feel faster than running a local model because the inference work does
 not happen on your machine, though the result still depends on network latency.
@@ -75,6 +75,9 @@ Alternatively, you can set `COPILOT_TOKEN` manually. This takes precedence over 
     ask-ubuntu-docs gui --copilot
     ```
 
+    Note that if you run the app from the desktop launcher or a different terminal session, it won't detect your token variable.
+
+
 ## Run the app with a local model
 
 The app talks to a local model through Ollama. You must choose and install the model separately.
@@ -102,10 +105,10 @@ The app talks to a local model through Ollama. You must choose and install the m
 5. Start the app, passing the chosen model:
 
     ```bash
-    ask-ubuntu-docs chat --model deepseek-r1:1.5b
+    ask-ubuntu-docs gui --model deepseek-r1:1.5b
     ```
 
-### Environment variables
+### Using environment variables
 
 You can also set the model and server URL via environment variables. For example:
 
