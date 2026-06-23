@@ -1,7 +1,7 @@
 name: ask-ubuntu-docs
 base: core26
 build-base: devel
-version: '0.8.0'
+version: '0.8.1'
 summary:  An LLM-based help app that uses the official Ubuntu documentation.
 
 description: |
