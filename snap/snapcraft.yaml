@@ -1,7 +1,7 @@
 name: ask-ubuntu-docs
 base: core26
 build-base: devel
-version: '0.8.1'
+version: '0.8.2'
 summary:  An LLM-based help app that uses the official Ubuntu documentation.
 
 description: |
@@ -19,7 +19,7 @@ confinement: strict
 
 apps:
   ask-ubuntu-docs:
-    command: usr/bin/ask-ubuntu-docs
+    command: bin/ask-ubuntu-docs
     environment:
       UBUNTU_HELP_INDEX_PATH: $SNAP_COMMON/index.lance
     plugs:
