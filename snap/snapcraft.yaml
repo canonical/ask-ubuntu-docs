@@ -1,7 +1,7 @@
 name: ask-ubuntu-docs
 base: core26
 build-base: devel
-version: '0.8.2'
+version: '0.8.3'
 summary:  An LLM-based help app that uses the official Ubuntu documentation.
 
 description: |
@@ -14,7 +14,7 @@ description: |
   To use a custom index, place it at $SNAP_USER_DATA/index.lance.
 
 license: GPL-3.0+
-grade: devel
+grade: stable
 confinement: strict
 
 apps:
