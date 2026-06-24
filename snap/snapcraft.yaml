@@ -17,6 +17,11 @@ license: GPL-3.0+
 grade: stable
 confinement: strict
 
+# LanceDB only builds on amd64 and arm64. Don't run the build on any other architectures.
+platforms:
+  amd64:
+  arm64:
+
 apps:
   ask-ubuntu-docs:
     command: bin/ask-ubuntu-docs
