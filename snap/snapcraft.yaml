@@ -2,7 +2,7 @@ name: ask-ubuntu-docs
 title: Ask the Docs
 base: core26
 # build-base: stable
-version: '0.8.4-2'
+version: '0.8.4-3'
 summary:  An LLM-based help app that uses the official Ubuntu documentation.
 contact: marek.suchanek@canonical.com
 issues: https://github.com/canonical/ask-ubuntu-docs/issues
@@ -32,6 +32,7 @@ apps:
     command: bin/ask-ubuntu-docs
     environment:
       UBUNTU_HELP_INDEX_PATH: $SNAP_COMMON/index.lance
+    common-id: com.canonical.AskUbuntuDocs
     plugs:
       - network          # Ollama / Copilot API calls
       - home             # reading config/token files under $HOME
@@ -41,10 +42,9 @@ apps:
       - wayland
       - x11
       - opengl
-      - dbus-session-bus
 
 slots:
-  dbus-session-bus:
+  ask-ubuntu-docs:
     interface: dbus
     bus: session
     name: com.canonical.AskUbuntuDocs
