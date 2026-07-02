@@ -43,7 +43,13 @@ The app uses the `gpt-4o-mini` model via the GitHub Models API.
     gh auth token
     ```
 
-5. Run Ask the Docs from your desktop interface, or launch it from the command line:
+5. Allow Ask the Docs to read your GitHub authentication token:
+
+    ```bash
+    sudo snap connect ask-ubuntu-docs:password-manager-service
+    ```
+
+6. Run Ask the Docs from your desktop interface, or launch it from the command line:
 
     ```bash
     ask-ubuntu-docs gui --copilot
