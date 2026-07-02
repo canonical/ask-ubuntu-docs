@@ -190,28 +190,59 @@ impl CopilotClient {
         }
 
         // 2. Try the system keyring (works inside snaps with the secret-service plug)
-        if let Some(token) = token_from_keyring().await {
-            eprintln!("Using token from system keyring (gh:github.com).");
-            return Ok(Self { client: http, token, model });
+        match token_from_keyring().await {
+            Ok(token) => {
+                eprintln!("Using token from system keyring (gh:github.com).");
+                return Ok(Self { client: http, token, model });
+            }
+            Err(e) => {
+                eprintln!("Note: keyring lookup failed: {e:#}");
+            }
         }
 
-        // 3. Fall back to the gh CLI
-        let gh_output = StdCommand::new("gh")
-            .args(["auth", "token"])
-            .output()
-            .context("failed to run `gh auth token`; install the GitHub CLI and run `gh auth login`")?;
-
-        if !gh_output.status.success() {
-            let stderr = String::from_utf8_lossy(&gh_output.stderr);
-            anyhow::bail!("`gh auth token` failed: {stderr}");
+        // 3. Fall back to the gh CLI (works when gh is on PATH, e.g. classic confinement or host installs)
+        let gh_result = StdCommand::new("gh").args(["auth", "token"]).output();
+        match gh_result {
+            Ok(output) if output.status.success() => {
+                let token = String::from_utf8(output.stdout)
+                    .context("`gh auth token` output is not valid UTF-8")?
+                    .trim()
+                    .to_string();
+                return Ok(Self { client: http, token, model });
+            }
+            Ok(output) => {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                eprintln!("Note: `gh auth token` failed: {stderr}");
+            }
+            Err(e) => {
+                eprintln!("Note: could not run `gh auth token`: {e}");
+            }
         }
 
-        let token = String::from_utf8(gh_output.stdout)
-            .context("`gh auth token` output is not valid UTF-8")?
-            .trim()
-            .to_string();
-
-        Ok(Self { client: http, token, model })
+        let is_snap = std::env::var("SNAP").is_ok();
+        if is_snap {
+            let snap_name = std::env::var("SNAP_NAME").unwrap_or_else(|_| "ask-ubuntu-docs".into());
+            anyhow::bail!(
+                "Could not retrieve a GitHub token.\n\
+                \n\
+                Running inside a snap with strict confinement; the keyring plug must be connected.\n\
+                Run this once to grant access:\n\
+                \n\
+                    sudo snap connect {snap_name}:password-manager-service\n\
+                \n\
+                Alternatively, set the COPILOT_TOKEN environment variable:\n\
+                \n\
+                    COPILOT_TOKEN=<your-token> {snap_name}"
+            );
+        } else {
+            anyhow::bail!(
+                "Could not retrieve a GitHub token.\n\
+                \n\
+                Options:\n\
+                  • Run `gh auth login` to authenticate via the GitHub CLI\n\
+                  • Set the COPILOT_TOKEN environment variable to a personal access token"
+            );
+        }
     }
 
     async fn send_request(&self, messages: &[Message]) -> Result<reqwest::Response> {
@@ -395,17 +426,32 @@ where
 // Attempt to retrieve the GitHub OAuth token from the system keyring.
 // gh stores its tokens under service="gh:github.com"; we take the first
 // unlocked item found without requiring a specific account attribute.
-// Returns None silently on any error so callers can try the next fallback.
-async fn token_from_keyring() -> Option<String> {
-    let ss = SecretService::connect(EncryptionType::Dh).await.ok()?;
+// Returns an error describing what went wrong so the caller can log it.
+async fn token_from_keyring() -> Result<String> {
+    let ss = SecretService::connect(EncryptionType::Dh)
+        .await
+        .context("could not connect to the D-Bus Secret Service (is a keyring daemon running?)")?;
+
     let results = ss
         .search_items(std::collections::HashMap::from([("service", "gh:github.com")]))
         .await
-        .ok()?;
+        .context("Secret Service search failed")?;
 
-    let item = results.unlocked.into_iter().next()?;
-    let secret_bytes = item.get_secret().await.ok()?;
-    let token = String::from_utf8(secret_bytes).ok()?;
+    // Prefer already-unlocked items; fall back to locked ones
+    let item = if let Some(i) = results.unlocked.into_iter().next() {
+        i
+    } else if let Some(i) = results.locked.into_iter().next() {
+        i.unlock().await.context("failed to unlock keyring item")?;
+        i
+    } else {
+        anyhow::bail!("no gh:github.com entry found in the keyring");
+    };
+
+    let secret_bytes = item.get_secret().await.context("failed to read secret from keyring item")?;
+    let token = String::from_utf8(secret_bytes).context("keyring secret is not valid UTF-8")?;
     let token = token.trim().to_string();
-    if token.is_empty() { None } else { Some(token) }
+    if token.is_empty() {
+        anyhow::bail!("keyring entry for gh:github.com is empty");
+    }
+    Ok(token)
 }
