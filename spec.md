@@ -160,6 +160,7 @@ Subcommand flags (chat and gui):
 
 - GNOME Shell search provider integration (stretch goal)
 - Agentic actions (detecting user intent and performing system actions on their behalf — stretch goal)
+- In-app API token management UI (stretch goal)
 - Support for non-Ubuntu/non-GNOME desktops
 - General web search or crawling beyond official Ubuntu docs
 - Fine-tuning or training models
@@ -186,6 +187,17 @@ Detect actionable intents in the user query (e.g. "change my wallpaper"), presen
 Replace the single `gtk::Label` per assistant response with a composite widget that renders fenced code blocks using GtkSourceView (`sourceview5` crate) with syntax highlighting and a "Copy" button. The `pulldown-cmark` event stream already distinguishes `Tag::CodeBlock(CodeBlockKind::Fenced(lang))` from inline code.
 
 Requires `sourceview5` crate and `libgtksourceview-5-0` snap stage-package.
+
+---
+
+## Stretch Goal: API Token Settings Dialog
+
+Add an `Adw.PreferencesDialog` accessible from the header bar where users can paste and save API tokens for GitHub Copilot and any future providers (e.g. OpenAI-compatible endpoints). This removes the need for any command-line setup for GUI users.
+
+- Each provider gets its own password-entry row; tokens are stored in the system keyring via the `secret-service` crate with a provider-specific `service` attribute (e.g. `ask-ubuntu-docs:copilot`, `ask-ubuntu-docs:openai`).
+- For GitHub Copilot, guide users to create a fine-grained PAT at `https://github.com/settings/personal-access-tokens` with no extra scopes — sufficient for the GitHub Models API.
+- The existing `gh` keyring fallback (`service=gh:github.com`) is preserved for developers who already have `gh` authenticated.
+- Uses the existing `password-manager-service` snap plug (no new permissions required).
 
 ---
 
