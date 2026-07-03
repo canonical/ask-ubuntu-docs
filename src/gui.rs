@@ -155,7 +155,8 @@ fn build_ui(
     toolbar_view.add_top_bar(&header);
 
     // Banner is hidden until authentication fails; revealed with a contextual message.
-    let banner = Banner::builder().title("").revealed(false).build();
+    // The "Retry" button re-runs authentication (useful after starting Ollama or connecting the keyring plug).
+    let banner = Banner::builder().title("").revealed(false).button_label("Retry").build();
     toolbar_view.add_top_bar(&banner);
     toolbar_view.set_content(Some(&main_box));
     window.set_content(Some(&toolbar_view));
@@ -186,32 +187,53 @@ fn build_ui(
         });
     }
 
-    // Authenticate asynchronously so the window appears immediately.
-    // On success, populate `client` and enable the send button.
-    // On failure, reveal the banner with an actionable message.
-    let (auth_tx, auth_rx) = async_channel::bounded::<Result<LlmClient, String>>(1);
-    tokio_handle.spawn(async move {
-        let result = create_client(ollama_url, model, use_copilot).await;
-        auth_tx.send(result.map_err(|e| e.to_string())).await.ok();
-    });
-    glib::MainContext::default().spawn_local(async move {
-        if let Ok(result) = auth_rx.recv().await {
-            match result {
-                Ok(c) => {
-                    *client.lock().unwrap() = Some(Arc::new(c));
-                    send_btn.set_sensitive(true);
+    // Kicks off an authentication attempt asynchronously. On success, populates `client`
+    // and enables the send button. On failure, reveals the banner with an actionable message.
+    // Extracted into a closure so both initial startup and the Retry button can call it.
+    let attempt_auth = {
+        let (banner, send_btn, client, tokio_handle) = (
+            banner.clone(), send_btn.clone(), client.clone(), tokio_handle.clone(),
+        );
+        let (ollama_url, model, use_copilot) = (ollama_url.clone(), model.clone(), use_copilot);
+        move || {
+            banner.set_revealed(false);
+            send_btn.set_sensitive(false);
+            let (auth_tx, auth_rx) = async_channel::bounded::<Result<LlmClient, String>>(1);
+            let (ollama_url, model) = (ollama_url.clone(), model.clone());
+            tokio_handle.spawn(async move {
+                let result = create_client(ollama_url, model, use_copilot).await;
+                auth_tx.send(result.map_err(|e| e.to_string())).await.ok();
+            });
+            let (banner, send_btn, client) = (banner.clone(), send_btn.clone(), client.clone());
+            glib::MainContext::default().spawn_local(async move {
+                if let Ok(result) = auth_rx.recv().await {
+                    match result {
+                        Ok(c) => {
+                            *client.lock().unwrap() = Some(Arc::new(c));
+                            send_btn.set_sensitive(true);
+                        }
+                        Err(e) => {
+                            let title = match snap_auth_hint() {
+                                Some(hint) => format!("Authentication failed. Run: {hint}"),
+                                None => format!("Authentication failed: {e}"),
+                            };
+                            banner.set_title(&title);
+                            banner.set_revealed(true);
+                        }
+                    }
                 }
-                Err(e) => {
-                    let title = match snap_auth_hint() {
-                        Some(hint) => format!("Authentication failed. Run: {hint}"),
-                        None => format!("Authentication failed: {e}"),
-                    };
-                    banner.set_title(&title);
-                    banner.set_revealed(true);
-                }
-            }
+            });
         }
+    };
+
+    // Wire the Retry button to re-run authentication.
+    banner.connect_button_clicked({
+        let attempt_auth = attempt_auth.clone();
+        move |_| attempt_auth()
     });
+
+    // Run initial authentication on startup.
+    attempt_auth();
 
     window.present();
 }

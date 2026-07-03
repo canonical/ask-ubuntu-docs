@@ -89,7 +89,9 @@ pub async fn create_client(
         Ok(LlmClient::Copilot(CopilotClient::create(copilot_model).await?))
     } else {
         let ollama_model = model.unwrap_or_else(|| DEFAULT_MODEL.to_string());
-        Ok(LlmClient::Ollama(OllamaClient::new(ollama_url, ollama_model)))
+        let client = OllamaClient::new(ollama_url, ollama_model);
+        client.check_connection().await?;
+        Ok(LlmClient::Ollama(client))
     }
 }
 

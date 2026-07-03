@@ -109,6 +109,21 @@ impl OllamaClient {
         }
     }
 
+    // Verifies the Ollama server is reachable by listing available models.
+    // Returns an error with a helpful message if the server is not running.
+    pub async fn check_connection(&self) -> Result<()> {
+        let endpoint = format!("{}/api/tags", self.url.trim_end_matches('/'));
+        self.client
+            .get(&endpoint)
+            .send()
+            .await
+            .with_context(|| format!(
+                "Could not connect to Ollama at {}. Make sure Ollama is running:\n\n    ollama serve",
+                self.url
+            ))?;
+        Ok(())
+    }
+
     async fn send_request(&self, messages: &[Message]) -> Result<reqwest::Response> {
         let req = OllamaChatRequest { model: &self.model, messages, stream: true };
         let endpoint = format!("{}/api/chat", self.url.trim_end_matches('/'));
