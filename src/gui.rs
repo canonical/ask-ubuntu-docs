@@ -112,6 +112,8 @@ fn build_ui(
     let input = Entry::builder()
         .placeholder_text("Ask a question…")
         .hexpand(true)
+        // Disabled until authentication succeeds
+        .sensitive(false)
         .build();
 
     let send_btn = Button::builder()
@@ -191,31 +193,37 @@ fn build_ui(
     // and enables the send button. On failure, reveals the banner with an actionable message.
     // Extracted into a closure so both initial startup and the Retry button can call it.
     let attempt_auth = {
-        let (banner, send_btn, client, tokio_handle) = (
-            banner.clone(), send_btn.clone(), client.clone(), tokio_handle.clone(),
+        let (banner, send_btn, client, input, tokio_handle) = (
+            banner.clone(), send_btn.clone(), client.clone(), input.clone(), tokio_handle.clone(),
         );
         let (ollama_url, model, use_copilot) = (ollama_url.clone(), model.clone(), use_copilot);
         move || {
             banner.set_revealed(false);
             send_btn.set_sensitive(false);
+            input.set_sensitive(false);
             let (auth_tx, auth_rx) = async_channel::bounded::<Result<LlmClient, String>>(1);
             let (ollama_url, model) = (ollama_url.clone(), model.clone());
             tokio_handle.spawn(async move {
                 let result = create_client(ollama_url, model, use_copilot).await;
                 auth_tx.send(result.map_err(|e| e.to_string())).await.ok();
             });
-            let (banner, send_btn, client) = (banner.clone(), send_btn.clone(), client.clone());
+            let (banner, send_btn, client, input) = (banner.clone(), send_btn.clone(), client.clone(), input.clone());
             glib::MainContext::default().spawn_local(async move {
                 if let Ok(result) = auth_rx.recv().await {
                     match result {
                         Ok(c) => {
                             *client.lock().unwrap() = Some(Arc::new(c));
                             send_btn.set_sensitive(true);
+                            input.set_sensitive(true);
                         }
                         Err(e) => {
-                            let title = match snap_auth_hint() {
-                                Some(hint) => format!("Authentication failed. Run: {hint}"),
-                                None => format!("Authentication failed: {e}"),
+                            let title = if use_copilot {
+                                match snap_auth_hint() {
+                                    Some((_, hint)) => format!("Authentication failed. Run: {hint}"),
+                                    None => format!("Authentication failed: {e}"),
+                                }
+                            } else {
+                                e
                             };
                             banner.set_title(&title);
                             banner.set_revealed(true);

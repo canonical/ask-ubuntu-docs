@@ -111,7 +111,7 @@ impl OllamaClient {
 
     // Verifies the Ollama server is reachable by listing available models.
     // Returns an error with a helpful message if the server is not running.
-    pub async fn check_connection(&self) -> Result<()> {
+    pub(crate) async fn check_connection(&self) -> Result<()> {
         let endpoint = format!("{}/api/tags", self.url.trim_end_matches('/'));
         self.client
             .get(&endpoint)
@@ -234,8 +234,7 @@ impl CopilotClient {
             }
         }
 
-        if let Some(hint) = snap_auth_hint() {
-            let snap_name = std::env::var("SNAP_NAME").unwrap_or_else(|_| "ask-ubuntu-docs".into());
+        if let Some((snap_name, hint)) = snap_auth_hint() {
             anyhow::bail!(
                 "Could not retrieve a GitHub token.\n\
                 \n\
@@ -437,15 +436,16 @@ where
     Ok(full_reply)
 }
 
-// Returns the `sudo snap connect` command the user needs to run, or None when
-// not running inside a snap. Used to surface the same actionable hint in both
-// the CLI error path and the GUI banner.
-pub fn snap_auth_hint() -> Option<String> {
+// Returns the `sudo snap connect` command and snap name, or None when
+// not running inside a snap. Returning both avoids re-reading the env var
+// at each call site.
+pub fn snap_auth_hint() -> Option<(String, String)> {
     if std::env::var("SNAP").is_err() {
         return None;
     }
     let snap_name = std::env::var("SNAP_NAME").unwrap_or_else(|_| "ask-ubuntu-docs".into());
-    Some(format!("sudo snap connect {snap_name}:password-manager-service"))
+    let hint = format!("sudo snap connect {snap_name}:password-manager-service");
+    Some((snap_name, hint))
 }
 
 // gh stores its tokens under service="gh:github.com"; we take the first
