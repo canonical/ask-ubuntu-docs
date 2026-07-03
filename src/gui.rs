@@ -2,7 +2,7 @@ use std::sync::{Arc, Mutex};
 
 use adw::glib;
 use adw::prelude::*;
-use adw::{Application, ApplicationWindow, Clamp, HeaderBar, ToolbarView};
+use adw::{Application, ApplicationWindow, Banner, Clamp, HeaderBar, ToolbarView};
 use anyhow::Result;
 use gtk::{Box, Button, Entry, Label, Orientation, ScrolledWindow, Separator};
 
@@ -20,6 +20,7 @@ pub fn run(
     rag: Arc<Mutex<RagStore>>,
     conversation: Arc<Mutex<Conversation>>,
     tokio_handle: tokio::runtime::Handle,
+    show_keyring_warning: bool,
 ) -> Result<()> {
     let app = Application::builder().application_id(APP_ID).build();
 
@@ -30,7 +31,7 @@ pub fn run(
             conversation.clone(),
             tokio_handle.clone(),
         );
-        move |app| build_ui(app, client.clone(), rag.clone(), conversation.clone(), tokio_handle.clone())
+        move |app| build_ui(app, client.clone(), rag.clone(), conversation.clone(), tokio_handle.clone(), show_keyring_warning)
     });
 
     // Pass no CLI args to GTK — argument parsing is handled by clap before this point
@@ -70,6 +71,7 @@ fn build_ui(
     rag: Arc<Mutex<RagStore>>,
     conversation: Arc<Mutex<Conversation>>,
     tokio_handle: tokio::runtime::Handle,
+    show_keyring_warning: bool,
 ) {
     load_css();
 
@@ -149,6 +151,18 @@ fn build_ui(
     header.pack_end(&system_dropdown);
     toolbar_view.add_top_bar(&header);
     toolbar_view.set_content(Some(&main_box));
+
+    if show_keyring_warning {
+        let snap_name = std::env::var("SNAP_NAME").unwrap_or_else(|_| "ask-ubuntu-docs".into());
+        let banner = Banner::builder()
+            .title(format!(
+                "Keyring access not granted. To enable GitHub Copilot, run: sudo snap connect {snap_name}:password-manager-service"
+            ))
+            .revealed(true)
+            .build();
+        toolbar_view.add_top_bar(&banner);
+    }
+
     window.set_content(Some(&toolbar_view));
 
     // Connect send button — clone all shared handles for the closure

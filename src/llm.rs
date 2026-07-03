@@ -423,7 +423,14 @@ where
     Ok(full_reply)
 }
 
-// Attempt to retrieve the GitHub OAuth token from the system keyring.
+// Returns true if the Secret Service D-Bus interface is reachable.
+// Used at GUI startup to show a warning when running inside a snap whose
+// password-manager-service plug is not yet connected.
+pub async fn keyring_accessible() -> bool {
+    SecretService::connect(EncryptionType::Dh).await.is_ok()
+}
+
+
 // gh stores its tokens under service="gh:github.com"; we take the first
 // unlocked item found without requiring a specific account attribute.
 // Returns an error describing what went wrong so the caller can log it.

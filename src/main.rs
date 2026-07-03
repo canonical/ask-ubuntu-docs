@@ -12,6 +12,7 @@ mod prompts;
 mod vectordb;
 
 use conversation::{create_client, load_rag_with_spinner, Conversation, DEFAULT_OLLAMA_URL};
+use llm::keyring_accessible;
 
 // Instruction given to the LLM at the start of every conversation
 const SYSTEM_PROMPT: &str = include_str!("../cli-system-prompt.md");
@@ -62,11 +63,16 @@ async fn main() -> Result<()> {
             cli::run(client, rag, SYSTEM_PROMPT).await
         }
         Commands::Gui { ollama_url } => {
+            // Warn in the GUI if we're inside a snap and the keyring plug isn't connected.
+            // Only relevant for Copilot mode; Ollama needs no credentials.
+            let show_keyring_warning = cli.copilot
+                && std::env::var("SNAP").is_ok()
+                && !keyring_accessible().await;
             let client = create_client(ollama_url, cli.model, cli.copilot).await?;
             let rag = load_rag_with_spinner().await?;
             let conversation = Arc::new(Mutex::new(Conversation::new(SYSTEM_PROMPT.to_string())));
             let tokio_handle = tokio::runtime::Handle::current();
-            gui::run(Arc::new(client), Arc::new(Mutex::new(rag)), conversation, tokio_handle)
+            gui::run(Arc::new(client), Arc::new(Mutex::new(rag)), conversation, tokio_handle, show_keyring_warning)
         }
     }
 }
