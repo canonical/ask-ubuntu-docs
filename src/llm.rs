@@ -219,8 +219,7 @@ impl CopilotClient {
             }
         }
 
-        let is_snap = std::env::var("SNAP").is_ok();
-        if is_snap {
+        if let Some(hint) = snap_auth_hint() {
             let snap_name = std::env::var("SNAP_NAME").unwrap_or_else(|_| "ask-ubuntu-docs".into());
             anyhow::bail!(
                 "Could not retrieve a GitHub token.\n\
@@ -228,7 +227,7 @@ impl CopilotClient {
                 Running inside a snap with strict confinement; the keyring plug must be connected.\n\
                 Run this once to grant access:\n\
                 \n\
-                    sudo snap connect {snap_name}:password-manager-service\n\
+                    {hint}\n\
                 \n\
                 Alternatively, set the COPILOT_TOKEN environment variable:\n\
                 \n\
@@ -423,13 +422,16 @@ where
     Ok(full_reply)
 }
 
-// Returns true if the Secret Service D-Bus interface is reachable.
-// Used at GUI startup to show a warning when running inside a snap whose
-// password-manager-service plug is not yet connected.
-pub async fn keyring_accessible() -> bool {
-    SecretService::connect(EncryptionType::Dh).await.is_ok()
+// Returns the `sudo snap connect` command the user needs to run, or None when
+// not running inside a snap. Used to surface the same actionable hint in both
+// the CLI error path and the GUI banner.
+pub fn snap_auth_hint() -> Option<String> {
+    if std::env::var("SNAP").is_err() {
+        return None;
+    }
+    let snap_name = std::env::var("SNAP_NAME").unwrap_or_else(|_| "ask-ubuntu-docs".into());
+    Some(format!("sudo snap connect {snap_name}:password-manager-service"))
 }
-
 
 // gh stores its tokens under service="gh:github.com"; we take the first
 // unlocked item found without requiring a specific account attribute.

@@ -6,8 +6,8 @@ use adw::{Application, ApplicationWindow, Banner, Clamp, HeaderBar, ToolbarView}
 use anyhow::Result;
 use gtk::{Box, Button, Entry, Label, Orientation, ScrolledWindow, Separator};
 
-use crate::conversation::Conversation;
-use crate::llm::LlmClient;
+use crate::conversation::{create_client, Conversation};
+use crate::llm::{LlmClient, snap_auth_hint};
 use crate::markdown;
 use crate::prompts;
 use crate::vectordb::{RagStore, TOP_K};
@@ -16,22 +16,22 @@ const APP_ID: &str = "com.canonical.AskUbuntuDocs";
 const PRODUCTS: &[&str] = &["Desktop", "Server", "Core", "WSL", "Flavors"];
 
 pub fn run(
-    client: Arc<LlmClient>,
+    ollama_url: String,
+    model: Option<String>,
+    use_copilot: bool,
     rag: Arc<Mutex<RagStore>>,
     conversation: Arc<Mutex<Conversation>>,
     tokio_handle: tokio::runtime::Handle,
-    show_keyring_warning: bool,
 ) -> Result<()> {
     let app = Application::builder().application_id(APP_ID).build();
 
     app.connect_activate({
-        let (client, rag, conversation, tokio_handle) = (
-            client.clone(),
+        let (rag, conversation, tokio_handle) = (
             rag.clone(),
             conversation.clone(),
             tokio_handle.clone(),
         );
-        move |app| build_ui(app, client.clone(), rag.clone(), conversation.clone(), tokio_handle.clone(), show_keyring_warning)
+        move |app| build_ui(app, ollama_url.clone(), model.clone(), use_copilot, rag.clone(), conversation.clone(), tokio_handle.clone())
     });
 
     // Pass no CLI args to GTK — argument parsing is handled by clap before this point
@@ -67,11 +67,12 @@ fn load_css() {
 
 fn build_ui(
     app: &Application,
-    client: Arc<LlmClient>,
+    ollama_url: String,
+    model: Option<String>,
+    use_copilot: bool,
     rag: Arc<Mutex<RagStore>>,
     conversation: Arc<Mutex<Conversation>>,
     tokio_handle: tokio::runtime::Handle,
-    show_keyring_warning: bool,
 ) {
     load_css();
 
@@ -116,6 +117,8 @@ fn build_ui(
     let send_btn = Button::builder()
         .label("Send")
         .css_classes(["suggested-action"])
+        // Disabled until authentication succeeds
+        .sensitive(false)
         .build();
 
     let input_row = Box::builder()
@@ -150,22 +153,17 @@ fn build_ui(
         .build();
     header.pack_end(&system_dropdown);
     toolbar_view.add_top_bar(&header);
+
+    // Banner is hidden until authentication fails; revealed with a contextual message.
+    let banner = Banner::builder().title("").revealed(false).build();
+    toolbar_view.add_top_bar(&banner);
     toolbar_view.set_content(Some(&main_box));
-
-    if show_keyring_warning {
-        let snap_name = std::env::var("SNAP_NAME").unwrap_or_else(|_| "ask-ubuntu-docs".into());
-        let banner = Banner::builder()
-            .title(format!(
-                "Keyring access not granted. To enable GitHub Copilot, run: sudo snap connect {snap_name}:password-manager-service"
-            ))
-            .revealed(true)
-            .build();
-        toolbar_view.add_top_bar(&banner);
-    }
-
     window.set_content(Some(&toolbar_view));
 
-    // Connect send button — clone all shared handles for the closure
+    // Shared client handle — None until the async auth task below completes.
+    let client: Arc<Mutex<Option<Arc<LlmClient>>>> = Arc::new(Mutex::new(None));
+
+    // Connect send button and Enter key, capturing the shared client handle.
     {
         let (message_list, scroll, input, send_btn, client, rag, conversation, tokio_handle, system_dropdown) = (
             message_list.clone(), scroll.clone(), input.clone(), send_btn.clone(),
@@ -177,7 +175,6 @@ fn build_ui(
             on_send(&input, &send_btn_ref, &message_list, &scroll, &client, &rag, &conversation, &tokio_handle, &system_dropdown);
         });
     }
-    // Connect Enter key in the input field — needs its own set of clones
     {
         let (message_list, scroll, send_btn, client, rag, conversation, tokio_handle, system_dropdown) = (
             message_list.clone(), scroll.clone(), send_btn.clone(),
@@ -189,6 +186,33 @@ fn build_ui(
         });
     }
 
+    // Authenticate asynchronously so the window appears immediately.
+    // On success, populate `client` and enable the send button.
+    // On failure, reveal the banner with an actionable message.
+    let (auth_tx, auth_rx) = async_channel::bounded::<Result<LlmClient, String>>(1);
+    tokio_handle.spawn(async move {
+        let result = create_client(ollama_url, model, use_copilot).await;
+        auth_tx.send(result.map_err(|e| e.to_string())).await.ok();
+    });
+    glib::MainContext::default().spawn_local(async move {
+        if let Ok(result) = auth_rx.recv().await {
+            match result {
+                Ok(c) => {
+                    *client.lock().unwrap() = Some(Arc::new(c));
+                    send_btn.set_sensitive(true);
+                }
+                Err(e) => {
+                    let title = match snap_auth_hint() {
+                        Some(hint) => format!("Authentication failed. Run: {hint}"),
+                        None => format!("Authentication failed: {e}"),
+                    };
+                    banner.set_title(&title);
+                    banner.set_revealed(true);
+                }
+            }
+        }
+    });
+
     window.present();
 }
 
@@ -197,7 +221,7 @@ fn on_send(
     send_btn: &Button,
     message_list: &Box,
     scroll: &ScrolledWindow,
-    client: &Arc<LlmClient>,
+    client: &Arc<Mutex<Option<Arc<LlmClient>>>>,
     rag: &Arc<Mutex<RagStore>>,
     conversation: &Arc<Mutex<Conversation>>,
     tokio_handle: &tokio::runtime::Handle,
@@ -207,6 +231,12 @@ fn on_send(
     if text.trim().is_empty() {
         return;
     }
+
+    // Bail out if authentication hasn't completed yet (button should be disabled, but guard anyway).
+    let client = match client.lock().unwrap().as_ref().map(Arc::clone) {
+        Some(c) => c,
+        None => return,
+    };
 
     // Read the selected product and its system prompt on the GTK thread before spawning.
     // The product prompt is appended to the conversation's base system prompt for this turn.
@@ -269,7 +299,7 @@ fn on_send(
     // Spawn the RAG search + LLM streaming on the tokio runtime
     let (query, client, rag, conversation) = (
         text.to_string(),
-        Arc::clone(client),
+        client,
         Arc::clone(rag),
         Arc::clone(conversation),
     );
