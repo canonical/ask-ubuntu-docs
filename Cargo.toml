@@ -6,20 +6,20 @@ license = "GPL-3.0-or-later"
 
 [dependencies]
 anyhow = "1"
-arrow-array = "58"
-bytes = "1.11.1"
+arrow-array = "59"
+bytes = "1.11"
 clap = { version = "4.5", features = ["derive", "env"] }
 fastembed = { version = "5", default-features = false, features = ["ort-download-binaries-native-tls", "hf-hub-native-tls"] }
 futures-util = "0.3"
-gtk = { package = "gtk4", version = "0.9", features = ["v4_18"] }
-adw = { package = "libadwaita", version = "0.7", features = ["v1_6"] }
+gtk = { package = "gtk4", version = "0.11", features = ["v4_18"] }
+adw = { package = "libadwaita", version = "0.9", features = ["v1_9"] }
 async-channel = "2"
-indicatif = "0.17"
-lancedb = "0.29"
-pulldown-cmark = "0.11"
-reqwest = { version = "0.12", features = ["json", "stream"] }
+indicatif = "0.18"
+lancedb = "0.31"
+pulldown-cmark = "0.13"
+reqwest = { version = "0.13", features = ["json", "stream"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-toml = "0.8"
+toml = "1.1"
 tokio = { version = "1", features = ["full"] }
 secret-service = { version = "5.1.0", features = ["rt-tokio-crypto-rust"] }

@@ -36,7 +36,7 @@ pub fn to_pango(markdown: &str) -> String {
             },
 
             Event::Start(Tag::BlockQuote(_)) => out.push_str("<i>▌ "),
-            Event::End(TagEnd::BlockQuote) => out.push_str("</i>"),
+            Event::End(TagEnd::BlockQuote(_)) => out.push_str("</i>"),
 
             Event::Start(Tag::CodeBlock(_)) => {
                 in_code += 1;
